@@ -17,7 +17,7 @@ from ctypes import (
 )
 
 
-class Range:
+class Range(enum.Enum):
     def __init__(self, min_val, max_val):
         self.min = min_val
         self.max = max_val
@@ -25,8 +25,6 @@ class Range:
     def is_within(self, val):
         return val >= self.min and val <= self.max
 
-
-class DefaultRanges(Range, enum.Enum):
     UINT8 = 0, c_uint8(-1).value
     UINT16 = 0, c_uint16(-1).value
     UINT32 = 0, c_uint32(-1).value
@@ -35,7 +33,7 @@ class DefaultRanges(Range, enum.Enum):
 
 
 class RandomGenerator:
-    def __init__(self, base_range=DefaultRanges.INT, count=1000):
+    def __init__(self, base_range=Range.INT, count=1000):
         with open("config/random.cfg") as f:
             self.random = random.Random(int(f.read()))
         self.exclude = []
