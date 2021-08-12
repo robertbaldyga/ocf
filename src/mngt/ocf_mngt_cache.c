@@ -1656,6 +1656,22 @@ struct ocf_pipeline_properties _ocf_mngt_cache_bind_pipeline_properties = {
 	},
 };
 
+static void _ocf_mngt_activate_todo(ocf_pipeline_t pipeline,
+		void *priv, ocf_pipeline_arg_t arg)
+{
+	OCF_PL_FINISH_RET(pipeline, -OCF_ERR_START_CACHE_FAIL);
+}
+
+struct ocf_pipeline_properties _ocf_mngt_cache_activate_pipeline_properties = {
+	.priv_size = sizeof(struct ocf_cache_attach_context),
+	.finish = _ocf_mngt_cache_attach_finish,
+	.steps = {
+		/* TODO */
+		OCF_PL_STEP(_ocf_mngt_activate_todo),
+		OCF_PL_STEP_TERMINATOR(),
+	},
+};
+
 typedef void (*_ocf_mngt_cache_unplug_end_t)(void *context, int error);
 
 struct _ocf_mngt_cache_unplug_context {
@@ -1953,6 +1969,39 @@ static void _ocf_mngt_cache_bind(ocf_cache_t cache,
 
 	result = ocf_pipeline_create(&pipeline, cache,
 			&_ocf_mngt_cache_bind_pipeline_properties);
+	if (result)
+		OCF_CMPL_RET(cache, priv1, priv2, -OCF_ERR_NO_MEM);
+
+	result = ocf_pipeline_create(&cache->stop_pipeline, cache,
+			&ocf_mngt_cache_stop_pipeline_properties);
+	if (result) {
+		ocf_pipeline_destroy(pipeline);
+		OCF_CMPL_RET(cache, priv1, priv2, -OCF_ERR_NO_MEM);
+	}
+
+	context = ocf_pipeline_get_priv(pipeline);
+
+	context->cmpl = cmpl;
+	context->priv1 = priv1;
+	context->priv2 = priv2;
+	context->pipeline = pipeline;
+
+	context->cache = cache;
+	context->cfg = *cfg;
+
+	OCF_PL_NEXT_RET(pipeline);
+}
+
+static void _ocf_mngt_cache_activate(ocf_cache_t cache,
+		struct ocf_mngt_cache_device_config *cfg,
+		_ocf_mngt_cache_attach_end_t cmpl, void *priv1, void *priv2)
+{
+	struct ocf_cache_attach_context *context;
+	ocf_pipeline_t pipeline;
+	int result;
+
+	result = ocf_pipeline_create(&pipeline, cache,
+			&_ocf_mngt_cache_activate_pipeline_properties);
 	if (result)
 		OCF_CMPL_RET(cache, priv1, priv2, -OCF_ERR_NO_MEM);
 
@@ -2283,6 +2332,51 @@ void ocf_mngt_cache_bind(ocf_cache_t cache,
 		OCF_CMPL_RET(cache, priv, result);
 
 	_ocf_mngt_cache_bind(cache, cfg, _ocf_mngt_cache_bind_complete,
+			cmpl, priv);
+}
+
+static void _ocf_mngt_cache_activate_complete(ocf_cache_t cache, void *priv1,
+		void *priv2, int error)
+{
+	ocf_mngt_cache_bind_end_t cmpl = priv1;
+
+	if (error)
+		OCF_CMPL_RET(cache, priv2, error);
+
+	_ocf_mngt_cache_set_passive(cache);
+	ocf_cache_log(cache, log_info, "Successfully binded\n");
+
+	OCF_CMPL_RET(cache, priv2, 0);
+}
+
+void ocf_mngt_cache_activate(ocf_cache_t cache,
+		struct ocf_mngt_cache_device_config *cfg,
+		ocf_mngt_cache_activate_end_t cmpl, void *priv)
+{
+	int result;
+
+	OCF_CHECK_NULL(cache);
+	OCF_CHECK_NULL(cfg);
+
+	if (!cache->mngt_queue)
+		OCF_CMPL_RET(cache, priv, -OCF_ERR_INVAL);
+
+	/* Activate is not allowed in volatile metadata mode */
+	if (cache->metadata.is_volatile)
+		OCF_CMPL_RET(cache, priv, -OCF_ERR_INVAL);
+
+	/* Activate is not allowed with 'force' flag on */
+	if (cfg->force) {
+		ocf_cache_log(cache, log_err, "Using 'force' flag is forbidden "
+				"for activate operation.");
+		OCF_CMPL_RET(cache, priv, -OCF_ERR_INVAL);
+	}
+
+	result = _ocf_mngt_cache_validate_device_cfg(cfg);
+	if (result)
+		OCF_CMPL_RET(cache, priv, result);
+
+	_ocf_mngt_cache_activate(cache, cfg, _ocf_mngt_cache_activate_complete,
 			cmpl, priv);
 }
 
