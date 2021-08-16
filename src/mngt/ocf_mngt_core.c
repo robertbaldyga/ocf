@@ -229,6 +229,8 @@ int ocf_mngt_core_init_front_volume(ocf_core_t core)
 	if (ret)
 		return ret;
 
+	core->front_volume.cache = cache;
+
 	ret = ocf_volume_open(&core->front_volume, NULL);
 	if (ret)
 		ocf_volume_deinit(&core->front_volume);
@@ -378,7 +380,6 @@ static void ocf_mngt_cache_add_core_insert(ocf_pipeline_t pipeline,
 	ocf_cache_log(cache, log_debug, "Inserting core %s\n", cfg->name);
 
 	volume = ocf_core_get_volume(core);
-	volume->cache = cache;
 	core_id = ocf_core_get_id(core);
 
 	result = ocf_mngt_core_set_name(core, cfg->name);
