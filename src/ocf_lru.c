@@ -876,6 +876,15 @@ struct ocf_lru_populate_context {
 	void *priv;
 };
 
+static inline uint32_t bitreverse32(register uint32_t x)
+{
+	x = (((x & 0xaaaaaaaa) >> 1) | ((x & 0x55555555) << 1));
+	x = (((x & 0xcccccccc) >> 2) | ((x & 0x33333333) << 2));
+	x = (((x & 0xf0f0f0f0) >> 4) | ((x & 0x0f0f0f0f) << 4));
+	x = (((x & 0xff00ff00) >> 8) | ((x & 0x00ff00ff) << 8));
+	return((x >> 16) | (x << 16));
+}
+
 static int ocf_lru_populate_handle(ocf_parallelize_t parallelize,
 		void *priv, unsigned shard_id, unsigned shards_cnt)
 {
@@ -886,14 +895,27 @@ static int ocf_lru_populate_handle(ocf_parallelize_t parallelize,
 	struct ocf_lru_list *list;
 	unsigned lru_list = shard_id;
 	unsigned step = 0;
+	unsigned portion_clz;
+	unsigned maplen, portion, offset;
+	unsigned i, idx;
+
+	portion = DIV_ROUND_UP(entries, shards_cnt);
+	portion_clz = __builtin_clz(portion - 1);
+	maplen = 1 << (32 - portion_clz);
+
+	offset = (unsigned long) shard_id * portion / shards_cnt;
+	list = ocf_lru_get_list(&cache->free, lru_list, true);
 
 	cnt = 0;
-	for (cline = shard_id; cline < entries; cline += shards_cnt) {
+	for (i = offset; i < maplen + offset; i++) {
 		OCF_COND_RESCHED_DEFAULT(step);
 
-		ocf_metadata_set_partition_id(cache, cline, PARTITION_FREELIST);
+		idx = bitreverse32(i % maplen) >> portion_clz;
+		cline = idx * shards_cnt + shard_id;
+		if (cline >= entries)
+			continue;
 
-		list = ocf_lru_get_list(&cache->free, lru_list, true);
+		ocf_metadata_set_partition_id(cache, cline, PARTITION_FREELIST);
 
 		add_lru_head_nobalance(cache, list, cline);
 
