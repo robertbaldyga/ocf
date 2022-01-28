@@ -13,6 +13,9 @@
 
 #define OCF_VOLUME_TYPE_MAX 8
 
+#define OCF_VOLUME_TYPE_CORE 6
+#define OCF_VOLUME_TYPE_COMPOSITE 7
+
 /**
  * @brief OCF main control structure
  */

@@ -363,19 +363,14 @@ void ocf_mngt_cache_stop(ocf_cache_t cache,
  */
 struct ocf_mngt_cache_device_config {
 	/**
-	 * @brief Cache volume UUID
+	 * @brief Cache volume
 	 */
-	struct ocf_volume_uuid uuid;
+	ocf_volume_t volume;
 
 	/**
 	 * @brief Cache line size
 	 */
 	ocf_cache_line_size_t cache_line_size;
-
-	/**
-	 * @brief Cache volume type
-	 */
-	uint8_t volume_type;
 
 	/**
 	 * @brief Automatically open core volumes when loading cache

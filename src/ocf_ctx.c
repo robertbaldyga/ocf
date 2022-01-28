@@ -10,6 +10,7 @@
 #include "ocf_request.h"
 #include "ocf_logger_priv.h"
 #include "ocf_core_priv.h"
+#include "ocf_composite_volume_priv.h"
 #include "mngt/ocf_mngt_core_pool_priv.h"
 #include "metadata/metadata_io.h"
 
@@ -182,12 +183,18 @@ int ocf_ctx_create(ocf_ctx_t *ctx, const struct ocf_ctx_config *cfg)
 	if (ret)
 		goto err_utils;
 
+	ocf_composite_volume_type_init(ocf_ctx);
+	if (ret)
+		goto err_core_volume;
+
 	ocf_mngt_core_pool_init(ocf_ctx);
 
 	*ctx = ocf_ctx;
 
 	return 0;
 
+err_core_volume:
+	ocf_ctx_unregister_volume_type(ocf_ctx, OCF_VOLUME_TYPE_CORE);
 err_utils:
 	ocf_metadata_io_ctx_deinit(ocf_ctx);
 err_mio:

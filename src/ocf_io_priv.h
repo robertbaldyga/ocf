@@ -22,6 +22,17 @@ struct ocf_io_internal {
 	struct ocf_io io;
 };
 
+int ocf_io_allocator_default_init(ocf_io_allocator_t allocator,
+		uint32_t priv_size, const char *name);
+
+void ocf_io_allocator_default_deinit(ocf_io_allocator_t allocator);
+
+void *ocf_io_allocator_default_new(ocf_io_allocator_t allocator,
+		ocf_volume_t volume, ocf_queue_t queue,
+		uint64_t addr, uint32_t bytes, uint32_t dir);
+
+void ocf_io_allocator_default_del(ocf_io_allocator_t allocator, void *obj);
+
 int ocf_io_allocator_init(ocf_io_allocator_t allocator, ocf_io_allocator_type_t type,
 		uint32_t priv_size, const char *name);
 
