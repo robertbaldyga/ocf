@@ -239,7 +239,7 @@ typedef enum {
 	ocf_cleaning_max,
 		/*!< Stopper of enumerator */
 
-	ocf_cleaning_default = ocf_cleaning_alru,
+	ocf_cleaning_default = ocf_cleaning_nop,
 		/*!< Default cleaning policy type */
 } ocf_cleaning_t;
 
