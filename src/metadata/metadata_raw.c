@@ -7,6 +7,7 @@
 #include "metadata_segment_id.h"
 #include "metadata_raw.h"
 #include "metadata_io.h"
+#include "metadata_raw_pmem.h"
 #include "metadata_raw_atomic.h"
 #include "../ocf_def_priv.h"
 #include "../ocf_priv.h"
@@ -567,6 +568,19 @@ static const struct raw_iface IRAW[metadata_raw_type_max] = {
 		.flush_mark		= _raw_ram_flush_mark,
 		.flush_do_asynch	= _raw_ram_flush_do_asynch,
 	},
+	[metadata_raw_type_ram_pmem] = {
+		.init			= _raw_ram_init_pmem,
+		.deinit			= _raw_ram_deinit_pmem,
+		.size_of		= _raw_ram_size_of,
+		.size_on_ssd		= _raw_ram_size_on_ssd,
+		.checksum		= _raw_ram_checksum,
+		.page			= _raw_ram_page,
+		.access			= _raw_ram_access,
+		.load_all		= _raw_ram_load_all,
+		.flush_all		= _raw_ram_flush_all,
+		.flush_mark		= _raw_ram_flush_mark,
+		.flush_do_asynch	= _raw_ram_flush_do_asynch,
+	},
 	[metadata_raw_type_dynamic] = {
 		.init			= raw_dynamic_init,
 		.deinit			= raw_dynamic_deinit,
@@ -583,6 +597,19 @@ static const struct raw_iface IRAW[metadata_raw_type_max] = {
 	[metadata_raw_type_volatile] = {
 		.init			= _raw_ram_init,
 		.deinit			= _raw_ram_deinit,
+		.size_of		= _raw_ram_size_of,
+		.size_on_ssd		= raw_volatile_size_on_ssd,
+		.checksum		= raw_volatile_checksum,
+		.page			= _raw_ram_page,
+		.access			= _raw_ram_access,
+		.load_all		= raw_volatile_load_all,
+		.flush_all		= raw_volatile_flush_all,
+		.flush_mark		= raw_volatile_flush_mark,
+		.flush_do_asynch	= raw_volatile_flush_do_asynch,
+	},
+	[metadata_raw_type_volatile_pmem] = {
+		.init			= _raw_ram_init_pmem,
+		.deinit			= _raw_ram_deinit_pmem,
 		.size_of		= _raw_ram_size_of,
 		.size_on_ssd		= raw_volatile_size_on_ssd,
 		.checksum		= raw_volatile_checksum,

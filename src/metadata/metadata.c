@@ -477,7 +477,7 @@ static struct ocf_metadata_ctrl *ocf_metadata_ctrl_init(
 		raw->metadata_segment = i;
 
 		/* Default type for metadata RAW container */
-		raw->raw_type = metadata_raw_type_ram;
+		raw->raw_type = metadata_raw_type_ram_pmem;
 
 		if (metadata_volatile) {
 			raw->raw_type = metadata_raw_type_volatile;
@@ -672,7 +672,7 @@ int ocf_metadata_init_variable_size(struct ocf_cache *cache,
 		raw->metadata_segment = i;
 
 		/* Default type for metadata RAW container */
-		raw->raw_type = metadata_raw_type_ram;
+		raw->raw_type = metadata_raw_type_ram_pmem;
 
 		if (cache->metadata.is_volatile) {
 			raw->raw_type = metadata_raw_type_volatile;

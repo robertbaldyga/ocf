@@ -23,6 +23,7 @@ enum ocf_metadata_raw_type {
 	 * flushing to/landing from SSD
 	 */
 	metadata_raw_type_ram = 0,
+	metadata_raw_type_ram_pmem,
 
 	/**
 	 * @brief Dynamic implementation, elements are allocated when first
@@ -35,6 +36,7 @@ enum ocf_metadata_raw_type {
 	 * Support loading from SSD
 	 */
 	metadata_raw_type_volatile,
+	metadata_raw_type_volatile_pmem,
 
 	/**
 	 * @brief Implementation for atomic device used as cache
