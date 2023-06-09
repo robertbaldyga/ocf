@@ -206,9 +206,6 @@ typedef struct _env_allocator env_allocator;
 
 env_allocator *env_allocator_create(uint32_t size, const char *name, bool zero);
 
-#define env_allocator_create_extended(size, name, limit, zero) \
-	env_allocator_create(size, name, zero)
-
 void env_allocator_destroy(env_allocator *allocator);
 
 void *env_allocator_new(env_allocator *allocator);
