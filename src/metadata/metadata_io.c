@@ -486,12 +486,6 @@ int metadata_io_read_i_asynch(ocf_cache_t cache, ocf_queue_t queue,
 
 int ocf_metadata_io_open(struct ocf_ctx *ocf_ctx)
 {
-	uint32_t limits[] = {
-		[0 ... MIO_RPOOL_THRESHOLD - 1] = -1,
-		[MIO_RPOOL_THRESHOLD ... ocf_mio_size_max - 1] = MIO_RPOOL_LIMIT,
-		[ocf_mio_size_max ... env_mpool_max] = -1,
-	};
-
 	if (ocf_ctx->resources.mio.ref_count > 0)
 		goto out;
 
@@ -499,7 +493,6 @@ int ocf_metadata_io_open(struct ocf_ctx *ocf_ctx)
 			sizeof(struct metadata_io_request_asynch),
 			sizeof(struct metadata_io_request),
 			ENV_MEM_NOIO, ocf_mio_size_max - 1, true,
-			limits,
 			"ocf_mio",
 			true);
 	if (ocf_ctx->resources.mio.mpool == NULL)
