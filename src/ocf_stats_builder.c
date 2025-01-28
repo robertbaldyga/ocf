@@ -52,6 +52,8 @@ static void _fill_req_part(struct ocf_stats_requests *req,
 	uint64_t total = serviced + s->read_reqs.pass_through +
 			s->write_reqs.pass_through;
 	uint64_t hit;
+	ocf_prefetch_t pf_id;
+	uint64_t prefetch_total = 0;
 
 	/* Reads Section */
 	hit = s->read_reqs.total - (s->read_reqs.full_miss +
@@ -72,6 +74,14 @@ static void _fill_req_part(struct ocf_stats_requests *req,
 	/* Pass-Through section */
 	_set(&req->rd_pt, s->read_reqs.pass_through, total);
 	_set(&req->wr_pt, s->write_reqs.pass_through, total);
+
+	/* Prefetch Section */
+	for_each_valid_pf_id(pf_id)
+		prefetch_total += s->prefetch_reqs[pf_id].total;
+	for_each_valid_pf_id(pf_id) {
+		_set(&req->prefetch[pf_id], s->prefetch_reqs[pf_id].total,
+				prefetch_total);
+	}
 
 	/* Summary */
 	_set(&req->serviced, serviced, total);

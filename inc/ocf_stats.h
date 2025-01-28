@@ -14,6 +14,8 @@
 #ifndef __OCF_STATS_H__
 #define __OCF_STATS_H__
 
+#include "ocf_prefetch.h"
+
 /**
  * Entire row of statistcs
  */
@@ -81,6 +83,7 @@ struct ocf_stats_requests {
 	struct ocf_stat wr_partial_misses;
 	struct ocf_stat wr_full_misses;
 	struct ocf_stat wr_total;
+	struct ocf_stat prefetch[ocf_prefetch_max];
 	struct ocf_stat rd_pt;
 	struct ocf_stat wr_pt;
 	struct ocf_stat serviced;
@@ -119,6 +122,9 @@ struct ocf_stats_blocks {
 	struct ocf_stat volume_rd;
 	struct ocf_stat volume_wr;
 	struct ocf_stat volume_total;
+	struct ocf_stat prefetch_core_rd[ocf_prefetch_max];
+	struct ocf_stat prefetch_cache_rd[ocf_prefetch_max];
+	struct ocf_stat prefetch_cache_wr[ocf_prefetch_max];
 	struct ocf_stat pass_through_rd;
 	struct ocf_stat pass_through_wr;
 	struct ocf_stat pass_through_total;

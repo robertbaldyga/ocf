@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -437,7 +437,7 @@ static int lock_clines(struct ocf_request *req)
  * Caller must assure that request map info is up to date (request
  * is traversed).
  */
-static inline void ocf_prepare_clines_miss(struct ocf_request *req)
+void ocf_prepare_clines_miss(struct ocf_request *req)
 {
 	bool part_has_space;
 

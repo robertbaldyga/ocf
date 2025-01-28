@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2021 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -12,6 +12,7 @@
 #include "ocf_ctx_priv.h"
 #include "ocf_volume_priv.h"
 #include "ocf_seq_cutoff.h"
+#include "prefetch/ocf_prefetch_priv.h"
 
 #define ocf_core_log_prefix(core, lvl, prefix, fmt, ...) \
 	ocf_cache_log_prefix(ocf_core_get_cache(core), lvl, ".%s" prefix, \
@@ -96,6 +97,9 @@ struct ocf_core {
 	uint32_t added : 1;
 
 	struct ocf_counters_core *counters;
+
+	ocf_pf_mask_t prefetch_mask;
+	ocf_pf_t *prefetch_handles[ocf_prefetch_max];
 
 	void *priv;
 };

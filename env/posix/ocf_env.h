@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2019-2022 Intel Corporation
- * Copyright(c) 2023-2024 Huawei Technologies
+ * Copyright(c) 2023-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -152,6 +152,33 @@ static inline void *env_vzalloc(size_t size)
 static inline void env_vfree(const void *ptr)
 {
 	free((void *)ptr);
+}
+
+#define ENV_PROCESSOR_CACHE_LINE_SIZE   64
+
+static inline void *env_aligned_alloc(size_t alignment, size_t size)
+{
+	void *memptr = NULL;
+
+	if (posix_memalign(&memptr, alignment, size))
+		return NULL;
+
+	return memptr;
+}
+
+static inline void *env_aligned_zalloc(size_t alignment, size_t size)
+{
+	void *ptr = env_aligned_alloc(alignment, size);
+
+	if (ptr)
+		memset(ptr, 0, size);
+
+	return ptr;
+}
+
+static inline void env_aligned_free(const void *p)
+{
+	free((void *)p);
 }
 
 /* SECURE MEMORY MANAGEMENT */
@@ -368,13 +395,55 @@ static inline void env_completion_destroy(env_completion *completion)
 }
 
 /* ATOMIC VARIABLES */
+
+typedef struct {
+	volatile uint8_t counter;
+} env_atomic8;
+
+static inline uint8_t env_atomic8_read(const env_atomic8 *a)
+{
+	return a->counter; /* TODO */
+}
+
+static inline void env_atomic8_set(env_atomic8 *a, uint8_t i)
+{
+	a->counter = i; /* TODO */
+}
+
+static inline uint8_t env_atomic8_cmpxchg(env_atomic8 *a,
+		uint8_t old, uint8_t new_value)
+{
+	return __sync_val_compare_and_swap(&a->counter, old, new_value);
+}
+
+static inline void env_atomic8_sub(uint8_t i, env_atomic8 *a)
+{
+	__sync_sub_and_fetch(&a->counter, i);
+}
+
+static inline void env_atomic8_dec(env_atomic8 *a)
+{
+	env_atomic8_sub(1, a);
+}
+
+static inline uint8_t env_atomic8_add_unless(env_atomic8 *a, uint8_t i, uint8_t u)
+{
+	uint8_t c, old;
+	c = env_atomic8_read(a);
+	for (;;) {
+		if (unlikely(c == (u)))
+			break;
+		old = env_atomic8_cmpxchg((a), c, c + (i));
+		if (likely(old == c))
+			break;
+		c = old;
+	}
+	return c != (u);
+}
+
 typedef struct {
 	volatile int counter;
 } env_atomic;
-
-typedef struct {
-	volatile long counter;
-} env_atomic64;
 
 static inline int env_atomic_read(const env_atomic *a)
 {
@@ -450,6 +519,10 @@ static inline int env_atomic_add_unless(env_atomic *a, int i, int u)
 	}
 	return c != (u);
 }
+
+typedef struct {
+	volatile long counter;
+} env_atomic64;
 
 static inline long env_atomic64_read(const env_atomic64 *a)
 {
@@ -527,6 +600,37 @@ static inline void env_spinlock_unlock(env_spinlock *l)
 static inline void env_spinlock_destroy(env_spinlock *l)
 {
 	ENV_BUG_ON(pthread_spin_destroy(&l->lock));
+}
+
+/* 8-BIT SPIN LOCKS */
+typedef env_atomic8 env_spinlock8;
+
+static inline int env_spinlock8_init(env_spinlock8 *l)
+{
+	env_atomic8_set(l, 0);
+
+	return 0;
+}
+
+static inline void env_spinlock8_lock(env_spinlock8 *l)
+{
+	uint32_t step = 0;
+
+	while (env_atomic8_cmpxchg(l, 0, 1)) {
+		if (unlikely(++step == 1000000)) {
+			env_cond_resched();
+			step = 0;
+		}
+	}
+}
+
+static inline void env_spinlock8_unlock(env_spinlock8 *l)
+{
+	env_atomic8_set(l, 0);
+}
+
+static inline void env_spinlock8_destroy(env_spinlock8 *l)
+{
 }
 
 /* RW LOCKS */

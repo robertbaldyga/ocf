@@ -14,6 +14,7 @@
 #include "../ocf_stats_priv.h"
 #include "../ocf_def_priv.h"
 #include "../cleaning/cleaning_ops.h"
+#include "../prefetch/ocf_prefetch_priv.h"
 
 ocf_seq_no_t ocf_mngt_get_core_seq_no(ocf_cache_t cache)
 {
@@ -519,6 +520,17 @@ static void ocf_mngt_cache_add_core_init_front_volume(ocf_pipeline_t pipeline,
 	ocf_pipeline_next(context->pipeline);
 }
 
+static void ocf_mngt_cache_add_core_init_prefetch(ocf_pipeline_t pipeline,
+		void *priv, ocf_pipeline_arg_t arg)
+{
+	struct ocf_cache_add_core_context *context = priv;
+	int result;
+
+	result = ocf_prefetch_create(context->core);
+
+	OCF_PL_NEXT_ON_SUCCESS_RET(pipeline, result);
+}
+
 static void ocf_mngt_cache_add_core_finish(ocf_pipeline_t pipeline,
 		void *priv, int error)
 {
@@ -548,6 +560,7 @@ struct ocf_pipeline_properties ocf_mngt_cache_try_add_core_pipeline_props = {
 		OCF_PL_STEP(ocf_mngt_cache_try_add_core_prepare),
 		OCF_PL_STEP(ocf_mngt_cache_try_add_core_insert),
 		OCF_PL_STEP(ocf_mngt_cache_add_core_init_front_volume),
+		OCF_PL_STEP(ocf_mngt_cache_add_core_init_prefetch),
 		OCF_PL_STEP_TERMINATOR(),
 	},
 };
@@ -559,6 +572,7 @@ struct ocf_pipeline_properties ocf_mngt_cache_add_core_pipeline_props = {
 		OCF_PL_STEP(ocf_mngt_cache_add_core_prepare),
 		OCF_PL_STEP(ocf_mngt_cache_add_core_insert),
 		OCF_PL_STEP(ocf_mngt_cache_add_core_init_front_volume),
+		OCF_PL_STEP(ocf_mngt_cache_add_core_init_prefetch),
 		OCF_PL_STEP_TERMINATOR(),
 	},
 };
@@ -807,6 +821,8 @@ static void _ocf_mngt_cache_detach_core(ocf_pipeline_t pipeline,
 	ocf_volume_deinit(&core->front_volume);
 	ocf_volume_close(&core->volume);
 	core->opened = false;
+
+	ocf_prefetch_destroy(core);
 
 	cache->ocf_core_inactive_count++;
 	env_bit_set(ocf_cache_state_incomplete,

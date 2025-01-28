@@ -129,6 +129,8 @@ struct ocf_request_io {
 	 */
 	uint8_t io_class;
 
+	uint8_t pf_id;
+
 	/**
 	 * @brief Front volume handle
 	 */

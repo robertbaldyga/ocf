@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2021 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -26,6 +26,9 @@ typedef enum {
 
 	/** Operation interrupted */
 	OCF_ERR_INTR,
+
+	/** Busy */
+	OCF_ERR_BUSY,
 
 	/** Operation not supported */
 	OCF_ERR_NOT_SUPP,

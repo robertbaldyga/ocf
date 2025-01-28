@@ -29,6 +29,7 @@
 #include "../cleaning/cleaning.h"
 #include "../promotion/ops.h"
 #include "../concurrency/ocf_pio_concurrency.h"
+#include "../prefetch/ocf_prefetch_priv.h"
 
 #define OCF_ASSERT_PLUGGED(cache) ENV_BUG_ON(!(cache)->device)
 
@@ -451,6 +452,8 @@ static void _ocf_mngt_load_add_cores(ocf_pipeline_t pipeline,
 
 		if (ocf_mngt_core_init_front_volume(core))
 			goto err;
+
+		ocf_prefetch_create(core);
 
 		core->counters =
 			env_zalloc(sizeof(*core->counters), ENV_MEM_NORMAL);

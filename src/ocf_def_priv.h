@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2021 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -10,11 +10,22 @@
 #include "ocf/ocf.h"
 #include "ocf_env.h"
 
+#define CACHE_LINE_BITS 32
+#define CORE_LINE_BITS 32
+
 #define BYTES_TO_SECTORS(x) ((x) >> ENV_SECTOR_SHIFT)
 #define SECTORS_TO_BYTES(x) ((x) << ENV_SECTOR_SHIFT)
 
 #define BYTES_TO_PAGES(x)	((((uint64_t)x) + (PAGE_SIZE - 1)) / PAGE_SIZE)
 #define PAGES_TO_BYTES(x)	(((uint64_t)x) * PAGE_SIZE)
+
+#ifdef PAGE_SHIFT
+#if PAGE_SHIFT != 12
+#error "PAGE_SHIFT must be 12."
+#endif
+#else
+#define PAGE_SHIFT 12
+#endif
 
 #define OCF_DIV_ROUND_UP(x, y)			\
 	({					\

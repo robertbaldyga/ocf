@@ -7,6 +7,8 @@
 #ifndef __OCF_STATS_PRIV_H__
 #define __OCF_STATS_PRIV_H__
 
+#include "prefetch/ocf_prefetch_priv.h"
+
 struct ocf_counters_block {
 	env_atomic64 read_bytes;
 	env_atomic64 write_bytes;
@@ -85,6 +87,9 @@ struct ocf_stats_io_class {
 	/** Writes requests statistics */
 	struct ocf_stats_req write_reqs;
 
+	/** Prefetch requests statistics */
+	struct ocf_stats_req prefetch_reqs[ocf_prefetch_max];
+
 	/** Block requests for ocf volume statistics */
 	struct ocf_stats_block blocks;
 
@@ -93,6 +98,12 @@ struct ocf_stats_io_class {
 
 	/** Block requests for core volume statistics */
 	struct ocf_stats_block core_blocks;
+	
+	/** Prefetch block requests for cache volume statistics */
+	struct ocf_stats_block prefetch_cache_blocks[ocf_prefetch_max];
+
+	/** Prefetch block requests for core volume statistics */
+	struct ocf_stats_block prefetch_core_blocks[ocf_prefetch_max];
 
 	/** Pass Through block requests statistics */
 	struct ocf_stats_block pass_through_blocks;
@@ -134,6 +145,9 @@ struct ocf_stats_core {
 	/** Write requests statistics */
 	struct ocf_stats_req write_reqs;
 
+	/** Prefetch requests statistics */
+	struct ocf_stats_req prefetch_reqs[ocf_prefetch_max];
+
 	/** Block requests for cache volume statistics */
 	struct ocf_stats_block cache_volume;
 
@@ -142,6 +156,12 @@ struct ocf_stats_core {
 
 	/** Block requests submitted by user to this core */
 	struct ocf_stats_block core;
+
+	/** Prefetch block requests for cache volume statistics */
+	struct ocf_stats_block prefetch_cache_blocks[ocf_prefetch_max];
+
+	/** Prefetch block requests for core volume statistics */
+	struct ocf_stats_block prefetch_core_blocks[ocf_prefetch_max];
 
 	/** Pass Through block requests statistics */
 	struct ocf_stats_block pass_through_blocks;
@@ -162,11 +182,15 @@ struct ocf_stats_core {
 struct ocf_counters_part {
 	struct ocf_counters_req read_reqs;
 	struct ocf_counters_req write_reqs;
+	struct ocf_counters_req prefetch_reqs[ocf_prefetch_max];
 
 	struct ocf_counters_block blocks;
 
 	struct ocf_counters_block core_blocks;
 	struct ocf_counters_block cache_blocks;
+
+	struct ocf_counters_block prefetch_cache_blocks[ocf_prefetch_max];
+	struct ocf_counters_block prefetch_core_blocks[ocf_prefetch_max];
 
 	struct ocf_counters_block pass_through_blocks;
 };

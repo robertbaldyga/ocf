@@ -26,6 +26,7 @@
 #include "cleaning/alru.h"
 #include "cleaning/acp.h"
 #include "promotion/nhit.h"
+#include "ocf_prefetch.h"
 #include "ocf_metadata.h"
 #include "ocf_io_class.h"
 #include "ocf_stats.h"

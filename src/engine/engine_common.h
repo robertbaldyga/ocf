@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -221,6 +221,13 @@ struct ocf_engine_callbacks
 	/** Resume handling after acquiring asynchronous lock */
 	ocf_req_async_lock_cb resume;
 };
+
+/**
+ * @brief Prepare cache lines for miss request
+ *
+ * @param req OCF request
+ */
+void ocf_prepare_clines_miss(struct ocf_request *req);
 
 /**
  * @brief Map and lock cachelines

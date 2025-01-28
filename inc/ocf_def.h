@@ -248,6 +248,20 @@ typedef enum {
 } ocf_cleaning_t;
 
 /**
+ * OCF supported prefetch policies type
+ */
+typedef enum {
+	ocf_prefetch_readahead,
+		/*!< Simple readahead policy */
+
+	ocf_prefetch_stream,
+		/*!< Sequential stream detection policy */
+
+	ocf_prefetch_max,
+		/*!< Stopper of enumerator */
+} ocf_prefetch_t;
+
+/**
  * OCF supported cache line sizes in bytes
  */
 typedef enum {

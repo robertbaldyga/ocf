@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024 Huawei Technologies
+ * Copyright(c) 2024-2025 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -1817,4 +1817,29 @@ void ocf_metadata_probe(ocf_ctx_t ctx, ocf_volume_t volume,
 		OCF_CMPL_RET(priv, result, NULL);
 }
 
+/* ===========================================================================*/
+/* Fast lookup to see if the line is a hit without lock
+ * See functions ocf_metadata_get_collision_info &
+ * ocf_metadata_set_collision_info.
+ */
+bool ocf_metadata_is_hit_no_lock(ocf_cache_t cache, ocf_core_id_t core_id,
+		uint64_t core_line)
+{
+	ocf_cache_line_t hash = ocf_metadata_hash_func(cache, core_line, core_id);
+	ocf_cache_line_t line = ocf_metadata_get_hash(cache, hash);
 
+	while (line != cache->device->collision_table_entries) {
+		ocf_core_id_t curr_core_id;
+		uint64_t curr_core_line;
+
+		ocf_metadata_get_core_info(cache, line, &curr_core_id, &curr_core_line);
+
+		if (curr_core_line == core_line && core_id == curr_core_id) {
+			return true;
+		}
+
+		line = ocf_metadata_get_collision_next(cache, line);
+	}
+
+	return false;
+}

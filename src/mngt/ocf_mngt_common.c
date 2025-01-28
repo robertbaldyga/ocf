@@ -16,6 +16,7 @@
 #include "../ocf_logger_priv.h"
 #include "../ocf_queue_priv.h"
 #include "../engine/engine_common.h"
+#include "../prefetch/ocf_prefetch_priv.h"
 
 /* Close if opened */
 void cache_mngt_core_deinit(ocf_core_t core)
@@ -24,6 +25,8 @@ void cache_mngt_core_deinit(ocf_core_t core)
 		ocf_volume_close(&core->front_volume);
 		ocf_volume_deinit(&core->front_volume);
 		ocf_volume_close(&core->volume);
+
+		ocf_prefetch_destroy(core);
 	}
 
 	if (core->has_volume)
