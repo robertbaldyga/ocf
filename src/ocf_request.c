@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024-2025 Huawei Technologies
+ * Copyright(c) 2024 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -10,7 +10,6 @@
 #include "concurrency/ocf_metadata_concurrency.h"
 #include "engine/engine_common.h"
 #include "utils/utils_cache_line.h"
-#include "ocf_env_refcnt.h"
 
 #define OCF_UTILS_RQ_DEBUG 0
 
@@ -121,7 +120,7 @@ struct ocf_request *ocf_req_new_cleaner(ocf_cache_t cache, ocf_queue_t queue,
 	struct ocf_request *req;
 	bool map_allocated = true, is_mngt = false;
 
-	if (!env_refcnt_inc(&cache->refcnt.metadata))
+	if (!ocf_refcnt_inc(&cache->refcnt.metadata))
 		return NULL;
 
 	if (unlikely(ocf_queue_is_mngt(queue))) {
@@ -138,7 +137,7 @@ struct ocf_request *ocf_req_new_cleaner(ocf_cache_t cache, ocf_queue_t queue,
 	}
 
 	if (!req) {
-		env_refcnt_dec(&cache->refcnt.metadata);
+		ocf_refcnt_dec(&cache->refcnt.metadata);
 		return NULL;
 	}
 	req->is_mngt = is_mngt;
@@ -193,8 +192,8 @@ struct ocf_request *ocf_req_new(ocf_queue_t queue, ocf_core_t core,
 
 	ocf_queue_get(queue);
 
-	if (!env_refcnt_inc(&cache->refcnt.metadata)) {
-		if (!env_refcnt_inc(&cache->refcnt.d2c))
+	if (!ocf_refcnt_inc(&cache->refcnt.metadata)) {
+		if (!ocf_refcnt_inc(&cache->refcnt.d2c))
 			ENV_BUG();
 		req = ocf_req_new_d2c(queue, core, addr, bytes, rw);
 		if (unlikely(!req)) {
@@ -221,7 +220,7 @@ struct ocf_request *ocf_req_new(ocf_queue_t queue, ocf_core_t core,
 	}
 
 	if (unlikely(!req)) {
-		env_refcnt_dec(&cache->refcnt.metadata);
+		ocf_refcnt_dec(&cache->refcnt.metadata);
 		ocf_queue_put(queue);
 		return NULL;
 	}
@@ -262,7 +261,7 @@ struct ocf_request *ocf_req_new_cache(ocf_cache_t cache, ocf_queue_t queue,
 
 	ENV_BUG_ON(ocf_queue_is_mngt(queue));
 
-	if (!env_refcnt_inc(&cache->refcnt.metadata))
+	if (!ocf_refcnt_inc(&cache->refcnt.metadata))
 		return NULL;
 
 	ocf_queue_get(queue);
@@ -282,7 +281,7 @@ struct ocf_request *ocf_req_new_cache(ocf_cache_t cache, ocf_queue_t queue,
 	}
 
 	if (unlikely(!req)) {
-		env_refcnt_dec(&cache->refcnt.metadata);
+		ocf_refcnt_dec(&cache->refcnt.metadata);
 		ocf_queue_put(queue);
 		return NULL;
 	}
@@ -388,9 +387,9 @@ void ocf_req_put(struct ocf_request *req)
 	OCF_DEBUG_TRACE(req->cache);
 
 	if (req->d2c)
-		env_refcnt_dec(&req->cache->refcnt.d2c);
+		ocf_refcnt_dec(&req->cache->refcnt.d2c);
 	else if (!req->is_mngt || req->cleaner)
-		env_refcnt_dec(&req->cache->refcnt.metadata);
+		ocf_refcnt_dec(&req->cache->refcnt.metadata);
 
 	if (unlikely(req->is_mngt)) {
 		env_free(req);
@@ -406,7 +405,7 @@ void ocf_req_put(struct ocf_request *req)
 
 int ocf_req_set_dirty(struct ocf_request *req)
 {
-	req->dirty = !!env_refcnt_inc(&req->cache->refcnt.dirty);
+	req->dirty = !!ocf_refcnt_inc(&req->cache->refcnt.dirty);
 	return req->dirty ? 0 : -OCF_ERR_AGAIN;
 }
 

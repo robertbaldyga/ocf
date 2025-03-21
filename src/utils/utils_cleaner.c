@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024-2025 Huawei Technologies
+ * Copyright(c) 2024 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -14,7 +14,6 @@
 #include "utils_io.h"
 #include "utils_cache_line.h"
 #include "../ocf_queue_priv.h"
-#include "ocf_env_refcnt.h"
 
 #define OCF_UTILS_CLEANER_DEBUG 0
 
@@ -841,7 +840,7 @@ void ocf_cleaner_refcnt_freeze(ocf_cache_t cache)
 	ocf_part_id_t part_id;
 
 	for_each_user_part(cache, curr_part, part_id)
-		env_refcnt_freeze(&curr_part->cleaning.counter);
+		ocf_refcnt_freeze(&curr_part->cleaning.counter);
 }
 
 void ocf_cleaner_refcnt_unfreeze(ocf_cache_t cache)
@@ -850,7 +849,7 @@ void ocf_cleaner_refcnt_unfreeze(ocf_cache_t cache)
 	ocf_part_id_t part_id;
 
 	for_each_user_part(cache, curr_part, part_id)
-		env_refcnt_unfreeze(&curr_part->cleaning.counter);
+		ocf_refcnt_unfreeze(&curr_part->cleaning.counter);
 }
 
 static void ocf_cleaner_refcnt_register_zero_cb_finish(void *priv)
@@ -874,7 +873,7 @@ void ocf_cleaner_refcnt_register_zero_cb(ocf_cache_t cache,
 
 	for_each_user_part(cache, curr_part, part_id) {
 		env_atomic_inc(&ctx->waiting);
-		env_refcnt_register_zero_cb(&curr_part->cleaning.counter,
+		ocf_refcnt_register_zero_cb(&curr_part->cleaning.counter,
 				ocf_cleaner_refcnt_register_zero_cb_finish, ctx);
 	}
 

@@ -1,11 +1,10 @@
 /*
  * Copyright(c) 2012-2021 Intel Corporation
- * Copyright(c) 2024-2025 Huawei Technologies
+ * Copyright(c) 2024 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include "ocf/ocf.h"
-#include "ocf_env_refcnt.h"
 #include "ocf_mngt_common.h"
 #include "ocf_mngt_core_priv.h"
 #include "../ocf_priv.h"
@@ -138,11 +137,19 @@ void cache_mngt_core_remove_from_cache(ocf_core_t core)
 	if (!core->opened && --cache->ocf_core_inactive_count == 0)
 		env_bit_clear(ocf_cache_state_incomplete, &cache->cache_state);
 }
+
 void ocf_mngt_cache_put(ocf_cache_t cache)
 {
+	ocf_ctx_t ctx;
+
 	OCF_CHECK_NULL(cache);
 
-	env_refcnt_dec(&cache->refcnt.cache);
+	if (ocf_refcnt_dec(&cache->refcnt.cache) == 0) {
+		ctx = cache->owner;
+		ocf_metadata_deinit(cache);
+		env_vfree(cache);
+		ocf_ctx_put(ctx);
+	}
 }
 
 void __set_cleaning_policy(ocf_cache_t cache,
@@ -174,7 +181,7 @@ int ocf_mngt_cache_get_by_name(ocf_ctx_t ctx, const char *name, size_t name_len,
 
 	if (instance) {
 		/* if cache is either fully initialized or during recovery */
-		if (!env_refcnt_inc(&instance->refcnt.cache)) {
+		if (!ocf_refcnt_inc(&instance->refcnt.cache)) {
 			/* Cache not initialized yet */
 			instance = NULL;
 		}
@@ -238,7 +245,7 @@ static void _ocf_mngt_cache_lock(ocf_cache_t cache,
 	if (ocf_mngt_cache_get(cache))
 		OCF_CMPL_RET(cache, priv, -OCF_ERR_CACHE_NOT_EXIST);
 
-	if (!env_refcnt_inc(&cache->refcnt.lock)) {
+	if (!ocf_refcnt_inc(&cache->refcnt.lock)) {
 		ocf_mngt_cache_put(cache);
 		OCF_CMPL_RET(cache, priv, -OCF_ERR_CACHE_NOT_EXIST);
 	}
@@ -246,7 +253,7 @@ static void _ocf_mngt_cache_lock(ocf_cache_t cache,
 	waiter = ocf_async_lock_new_waiter(&cache->lock,
 			_ocf_mngt_cache_lock_complete);
 	if (!waiter) {
-		env_refcnt_dec(&cache->refcnt.lock);
+		ocf_refcnt_dec(&cache->refcnt.lock);
 		ocf_mngt_cache_put(cache);
 		OCF_CMPL_RET(cache, priv, -OCF_ERR_NO_MEM);
 	}
@@ -258,7 +265,7 @@ static void _ocf_mngt_cache_lock(ocf_cache_t cache,
 	context->priv = priv;
 
 	lock_fn(waiter);
-	env_refcnt_dec(&cache->refcnt.lock);
+	ocf_refcnt_dec(&cache->refcnt.lock);
 }
 
 static int _ocf_mngt_cache_trylock(ocf_cache_t cache,
@@ -269,7 +276,7 @@ static int _ocf_mngt_cache_trylock(ocf_cache_t cache,
 	if (ocf_mngt_cache_get(cache))
 		return -OCF_ERR_CACHE_NOT_EXIST;
 
-	if (!env_refcnt_inc(&cache->refcnt.lock)) {
+	if (!ocf_refcnt_inc(&cache->refcnt.lock)) {
 		ocf_mngt_cache_put(cache);
 		return -OCF_ERR_CACHE_NOT_EXIST;
 	}
@@ -287,7 +294,7 @@ static int _ocf_mngt_cache_trylock(ocf_cache_t cache,
 	}
 
 out:
-	env_refcnt_dec(&cache->refcnt.lock);
+	ocf_refcnt_dec(&cache->refcnt.lock);
 	return result;
 }
 
@@ -302,14 +309,10 @@ int ocf_mngt_cache_lock_init(ocf_cache_t cache)
 {
 	int result;
 
-	result = env_refcnt_init(&cache->refcnt.lock, "lock", sizeof("lock"));
-	if (result)
-		return result;
+	ocf_refcnt_init(&cache->refcnt.lock);
 
 	result = ocf_async_lock_init(&cache->lock,
 			sizeof(struct ocf_mngt_cache_lock_context));
-	if (result)
-		env_refcnt_deinit(&cache->refcnt.lock);
 
 	return result;
 }
@@ -319,18 +322,17 @@ static void _ocf_mngt_cache_lock_deinit(void *priv)
 	ocf_cache_t cache = priv;
 
 	ocf_async_lock_deinit(&cache->lock);
-	env_refcnt_dec(&cache->refcnt.cache);
-	env_refcnt_deinit(&cache->refcnt.lock);
+	ocf_refcnt_dec(&cache->refcnt.cache);
 }
 
 void ocf_mngt_cache_lock_deinit(ocf_cache_t cache)
 {
 	bool cache_get;
 
-	cache_get = env_refcnt_inc(&cache->refcnt.cache);
+	cache_get = ocf_refcnt_inc(&cache->refcnt.cache);
 	ENV_BUG_ON(!cache_get);
-	env_refcnt_freeze(&cache->refcnt.lock);
-	env_refcnt_register_zero_cb(&cache->refcnt.lock,
+	ocf_refcnt_freeze(&cache->refcnt.lock);
+	ocf_refcnt_register_zero_cb(&cache->refcnt.lock,
 			     _ocf_mngt_cache_lock_deinit, cache);
 }
 
@@ -390,7 +392,7 @@ bool ocf_mngt_cache_is_locked(ocf_cache_t cache)
 /* if cache is either fully initialized or during recovery */
 static bool _ocf_mngt_cache_try_get(ocf_cache_t cache)
 {
-	return env_refcnt_inc(&cache->refcnt.cache);
+	return !!ocf_refcnt_inc(&cache->refcnt.cache);
 }
 
 int ocf_mngt_cache_get(ocf_cache_t cache)
@@ -521,10 +523,10 @@ static void _ocf_mngt_continue_pipeline_on_zero_refcnt_cb(void *priv)
 	ocf_pipeline_next((ocf_pipeline_t)priv);
 }
 
-void ocf_mngt_continue_pipeline_on_zero_refcnt(struct env_refcnt *refcnt,
+void ocf_mngt_continue_pipeline_on_zero_refcnt(struct ocf_refcnt *refcnt,
 		ocf_pipeline_t pipeline)
 {
-	env_refcnt_register_zero_cb(refcnt,
+	ocf_refcnt_register_zero_cb(refcnt,
 			_ocf_mngt_continue_pipeline_on_zero_refcnt_cb,
 			pipeline);
 }

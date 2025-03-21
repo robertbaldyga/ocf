@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2012-2022 Intel Corporation
- * Copyright(c) 2024-2025 Huawei Technologies
+ * Copyright(c) 2024 Huawei Technologies
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
@@ -15,6 +15,7 @@
 #include "metadata/metadata_structs.h"
 #include "utils/utils_list.h"
 #include "utils/utils_pipeline.h"
+#include "utils/utils_refcnt.h"
 #include "utils/utils_async_lock.h"
 #include "ocf_stats_priv.h"
 #include "cleaning/cleaning.h"
@@ -78,17 +79,17 @@ struct ocf_cache {
 
 	struct {
 		/* cache get/put counter */
-		struct env_refcnt cache;
+		struct ocf_refcnt cache __attribute__((aligned(64)));
 		/* # of requests potentially dirtying cachelines */
-		struct env_refcnt dirty;
+		struct ocf_refcnt dirty __attribute__((aligned(64)));
 		/* # of requests accessing attached metadata, excluding
 		 * management reqs */
-		struct env_refcnt metadata;
+		struct ocf_refcnt metadata __attribute__((aligned(64)));
 		/* # of requests in d2c mode */
-		struct env_refcnt d2c;
+		struct ocf_refcnt d2c;
 		/* # of unsettled cache lock operations (lock not acquired,
 		 * waiter not added yet) */
-		struct env_refcnt lock;
+		struct ocf_refcnt lock;
 	} refcnt;
 
 	struct {
