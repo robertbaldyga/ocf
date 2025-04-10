@@ -33,8 +33,8 @@
 #define OCF_DEBUG_RQ(req, format, ...) \
 	ocf_cache_log(req->cache, log_info, "[Engine][%s][%s, %llu, %u] %s - " \
 		format"\n", OCF_ENGINE_DEBUG_IO_NAME, \
-		OCF_READ == (req)->rw ? "RD" : "WR", req->byte_position, \
-		req->byte_length, __func__, ##__VA_ARGS__)
+		OCF_READ == (req)->rw ? "RD" : "WR", req->addr, \
+		req->bytes, __func__, ##__VA_ARGS__)
 
 #else
 #define OCF_DEBUG_PREFIX

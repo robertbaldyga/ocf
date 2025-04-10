@@ -28,9 +28,9 @@ typedef uint16_t ocf_core_id_t;
 typedef uint16_t ocf_seq_no_t;
 
 /**
- * @brief partition id type (by default designated as 16 bit unsigned integer)
+ * @brief partition id type (by default designated as 8 bit unsigned integer)
  */
-typedef uint16_t ocf_part_id_t;
+typedef uint8_t ocf_part_id_t;
 
 /**
  * @brief handle to object designating ocf context
@@ -71,6 +71,23 @@ typedef struct ocf_volume_uuid *ocf_uuid_t;
  * @brief handle to object designating ocf context object
  */
 typedef void ctx_data_t;
+
+struct ocf_request;
+/**
+ * @brief handle to io
+ */
+typedef struct ocf_request *ocf_io_t;
+
+/**
+ * @brief IO forward token
+ *
+ * The token is associated with IO that is being forwarded. It allows
+ * OCF to keep track of which IO has been forwarded where. It also has
+ * refcount which can be increased/decreased on each forward level, so
+ * that there is no need to introduce additional counters if at some
+ * level the forward needs to be splitted into several sub-forwards.
+ */
+typedef uint64_t ocf_forward_token_t;
 
 /**
  * @brief handle to I/O queue

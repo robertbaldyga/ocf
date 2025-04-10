@@ -18,4 +18,6 @@ struct ocf_dbg_seq_cutoff_status {
 void ocf_dbg_get_seq_cutoff_status(ocf_core_t core,
 		struct ocf_dbg_seq_cutoff_status *status);
 
+bool ocf_dbg_cache_is_settled(ocf_cache_t cache);
+
 #endif /* __OCF_DEBUG_H__ */

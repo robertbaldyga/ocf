@@ -9,4 +9,4 @@ int ocf_write_wb(struct ocf_request *req);
 
 int ocf_write_wb_do(struct ocf_request *req);
 
-#endif /* ENGINE_WI_H_ */
+#endif /* ENGINE_WB_H_ */

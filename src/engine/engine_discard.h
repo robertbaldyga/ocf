@@ -6,6 +6,6 @@
 #ifndef __ENGINE_DISCARD_H__
 #define __ENGINE_DISCARD_H__
 
-int ocf_discard(struct ocf_request *req);
+int ocf_engine_discard(struct ocf_request *req);
 
 #endif

@@ -35,7 +35,8 @@ int ocf_ctx_register_volume_type_internal(ocf_ctx_t ctx, uint8_t type_id,
 		goto err;
 	}
 
-	ocf_volume_type_init(&ctx->volume_type[type_id], properties, extended);
+	ocf_volume_type_init(&ctx->volume_type[type_id], ctx, properties,
+			extended);
 	if (!ctx->volume_type[type_id])
 		result = -EINVAL;
 
@@ -209,10 +210,6 @@ int ocf_ctx_create(ocf_ctx_t *ctx, const struct ocf_ctx_config *cfg)
 	if (ret)
 		goto err_logger;
 
-	ret = ocf_metadata_io_ctx_init(ocf_ctx);
-	if (ret)
-		goto err_mio;
-
 	ret = ocf_core_volume_type_init(ocf_ctx);
 	if (ret)
 		goto err_utils;
@@ -234,8 +231,6 @@ int ocf_ctx_create(ocf_ctx_t *ctx, const struct ocf_ctx_config *cfg)
 err_core_volume:
 	ocf_ctx_unregister_volume_type(ocf_ctx, OCF_VOLUME_TYPE_CORE);
 err_utils:
-	ocf_metadata_io_ctx_deinit(ocf_ctx);
-err_mio:
 	ocf_req_allocator_deinit(ocf_ctx);
 err_logger:
 	ocf_logger_close(&ocf_ctx->logger);
