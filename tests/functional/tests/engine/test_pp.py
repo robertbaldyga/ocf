@@ -15,7 +15,7 @@ from pyocf.types.volume_core import CoreVolume
 from pyocf.types.data import Data
 from pyocf.types.io import IoDir
 from pyocf.utils import Size
-from pyocf.types.shared import OcfCompletion
+from pyocf.types.shared import CacheLineSize, OcfCompletion
 from pyocf.rio import Rio, ReadWrite
 
 
@@ -119,7 +119,7 @@ def fill_cache(cache, fill_ratio):
         .target(vol)
         .readwrite(ReadWrite.RANDWRITE)
         .size(bytes_to_fill)
-        .bs(Size(512))
+        .bs(Size(4096))
         .qd(10)
         .run([queue])
     )
@@ -174,7 +174,7 @@ def test_promoted_after_hits_various_thresholds(pyocf_ctx, insertion_threshold, 
         .bs(Size(4096))
         .offset(last_core_line)
         .target(vol)
-        .size(Size(4096) + last_core_line)
+        .size(Size(4096))
     )
 
     for i in range(insertion_threshold - 1):
@@ -215,18 +215,18 @@ def test_partial_hit_promotion(pyocf_ctx):
     cache_device = RamVolume(Size.from_MiB(50))
     core_device = RamVolume(Size.from_MiB(50))
 
-    cache = Cache.start_on_device(cache_device)
+    cache = Cache.start_on_device(cache_device, cache_line_size=CacheLineSize.LINE_8KiB)
     core = Core.using_device(core_device)
     cache.add_core(core)
     vol = CoreVolume(core)
     queue = cache.get_default_queue()
 
     # Step 2
-    r = Rio().readwrite(ReadWrite.READ).bs(Size(512)).size(Size(512)).target(vol).run([queue])
+    r = Rio().readwrite(ReadWrite.READ).bs(Size(4096)).size(Size(512)).target(vol).run([queue])
 
     stats = cache.get_stats()
     cache_lines = stats["conf"]["size"]
-    assert stats["usage"]["occupancy"]["value"] == 1
+    assert stats["usage"]["occupancy"]["value"] == 2
 
     # Step 3
     cache.set_promotion_policy(PromotionPolicy.NHIT)
@@ -239,4 +239,4 @@ def test_partial_hit_promotion(pyocf_ctx):
 
     cache.settle()
     stats = cache.get_stats()
-    assert stats["usage"]["occupancy"]["value"] == 2, "Second cache line should be mapped"
+    assert stats["usage"]["occupancy"]["value"] == 4, "Second cache line should be mapped"

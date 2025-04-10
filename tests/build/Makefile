@@ -17,12 +17,15 @@ INCDIR=include/
 
 SRC=$(shell find ${SRCDIR} -name \*.c)
 OBJS = $(patsubst %.c, %.o, $(SRC))
-CFLAGS = -Wall -Werror -I${INCDIR} -I${SRCDIR}/ocf/env/
+CFLAGS = -Wall -MMD -Werror -I${INCDIR} -I${SRCDIR}/ocf/env/
 
 all: sync
 	$(MAKE) build
 
 build: $(OBJS)
+
+%.o: %.c Makefile
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 sync:
 	@$(MAKE) -C ${OCFDIR} inc O=$(PWD)
@@ -36,5 +39,7 @@ distclean:
 	@rm -rf $(OBJS)
 	@rm -rf src/ocf
 	@rm -rf include/ocf
+
+-include $(SRC:.c=.d)
 
 .PHONY: all build sync clean distclean

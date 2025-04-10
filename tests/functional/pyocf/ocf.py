@@ -2,7 +2,7 @@
 # Copyright(c) 2019-2021 Intel Corporation
 # SPDX-License-Identifier: BSD-3-Clause
 #
-from ctypes import c_void_p, cdll
+from ctypes import c_int, c_void_p, cdll
 import inspect
 import os
 
@@ -21,6 +21,9 @@ class OcfLib:
 
             lib.ocf_core_get_front_volume.restype = c_void_p
             lib.ocf_core_get_front_volume.argtypes = [c_void_p]
+
+            lib.ocf_queue_create_mngt.restype = c_int
+            lib.ocf_queue_create_mngt.argtypes = [c_void_p, c_void_p, c_void_p]
 
             cls.__lib__ = lib
 

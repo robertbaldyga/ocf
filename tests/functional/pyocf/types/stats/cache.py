@@ -35,4 +35,7 @@ class CacheInfo(Structure):
         ("core_count", c_uint32),
         ("metadata_footprint", c_uint64),
         ("metadata_end_offset", c_uint32),
+        ("standby_detached", c_bool),
+        ("ocf_classifier", c_uint8),
+        ("ocf_prefetcher", c_uint8),
     ]

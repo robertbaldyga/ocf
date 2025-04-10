@@ -30,5 +30,5 @@ class IoClassConfig(Structure):
 
 
 class IoClassesInfo(Structure):
-    MAX_IO_CLASSES = 33
+    MAX_IO_CLASSES = 6
     _fields_ = [("_config", IoClassConfig * MAX_IO_CLASSES)]
