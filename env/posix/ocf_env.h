@@ -42,6 +42,7 @@
 
 #define OCF_ALLOCATOR_NAME_MAX 128
 
+#define PAGE_SHIFT 12
 #define PAGE_SIZE 4096
 
 #define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
@@ -195,18 +196,24 @@ static inline void env_secure_free(const void *ptr, size_t size)
 	}
 }
 
+#include <sys/sysinfo.h>
+
 static inline uint64_t env_get_free_memory(void)
 {
-	return (uint64_t)(-1);
+	struct sysinfo info;
+	int ret;
+
+	ret = sysinfo(&info);
+	if (ret != 0)
+		return 0;
+
+	return (uint64_t)info.totalram * info.mem_unit;
 }
 
 /* ALLOCATOR */
 typedef struct _env_allocator env_allocator;
 
 env_allocator *env_allocator_create(uint32_t size, const char *name, bool zero);
-
-#define env_allocator_create_extended(size, name, limit, zero) \
-	env_allocator_create(size, name, zero)
 
 void env_allocator_destroy(env_allocator *allocator);
 
@@ -481,6 +488,11 @@ static inline void env_atomic64_dec(env_atomic64 *a)
 	env_atomic64_sub(1, a);
 }
 
+static inline long env_atomic64_add_return(long i, env_atomic64 *a)
+{
+	return __sync_add_and_fetch(&a->counter, i);
+}
+
 static inline long env_atomic64_inc_return(env_atomic64 *a)
 {
 	return __sync_add_and_fetch(&a->counter, 1);
@@ -592,6 +604,10 @@ static inline bool env_bit_test(int nr, const volatile unsigned long *addr)
 }
 
 /* SCHEDULING */
+#define ENV_SEC_TO_NSEC(_sec)	((_sec) * 1000000000)
+#define ENV_NSEC_TO_SEC(_sec)	((_sec) / 1000000000)
+#define ENV_NSEC_TO_MSEC(_sec)	((_sec) / 1000000)
+
 static inline int env_in_interrupt(void)
 {
 	return 0;
@@ -599,29 +615,28 @@ static inline int env_in_interrupt(void)
 
 static inline uint64_t env_get_tick_count(void)
 {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000000 + tv.tv_usec;
+	struct timespec tv;
+	return clock_gettime(CLOCK_REALTIME, &tv) ? 0 : ENV_SEC_TO_NSEC(tv.tv_sec) + tv.tv_nsec;
 }
 
 static inline uint64_t env_ticks_to_nsecs(uint64_t j)
 {
-	return j * 1000;
+	return j;
 }
 
 static inline uint64_t env_ticks_to_msecs(uint64_t j)
 {
-	return j / 1000;
+	return ENV_NSEC_TO_MSEC(j);
 }
 
 static inline uint64_t env_ticks_to_secs(uint64_t j)
 {
-	return j / 1000000;
+	return ENV_NSEC_TO_SEC(j);
 }
 
 static inline uint64_t env_secs_to_ticks(uint64_t j)
 {
-	return j * 1000000;
+	return ENV_SEC_TO_NSEC(j);
 }
 
 /* SORTING */

@@ -16,7 +16,7 @@
 
 #if 1 == OCF_METADATA_RAW_DEBUG
 #define OCF_DEBUG_TRACE(cache) \
-	ocf_cache_log(cache, log_info, "[Metadata][Raw] %s\n", __func__)
+	ocf_cache_log(log_info, "[Metadata][Raw] %s\n", __func__)
 
 #define OCF_DEBUG_MSG(cache, msg) \
 	ocf_cache_log(cache, log_info, "[Metadata][Raw] %s - %s\n", \
@@ -222,7 +222,7 @@ static int _raw_ram_drain_page(ocf_cache_t cache,
 	OCF_DEBUG_PARAM(cache, "Line = %u, Page = %u", line, page);
 
 	ctx_data_rd_check(cache->owner, _RAW_RAM_ADDR(raw, line), data, size);
-	ctx_data_seek(cache->owner, data, ctx_data_seek_current,
+	(void)ctx_data_seek(cache->owner, data, ctx_data_seek_current,
 			PAGE_SIZE - size);
 
 	return 0;
@@ -462,6 +462,7 @@ static void _raw_ram_flush_do_asynch_io_complete(ocf_cache_t cache,
 	OCF_DEBUG_MSG(cache, "Asynchronous flushing complete");
 
 	/* Call metadata flush completed call back */
+	ctx->req->error |= ctx->error;
 	ctx->complete(ctx->req, ctx->error);
 
 	env_free(ctx);

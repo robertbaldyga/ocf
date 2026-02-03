@@ -33,6 +33,7 @@
  * Minimum cache size in bytes
  */
 #define OCF_CACHE_SIZE_MIN	(40 * MiB)
+#define OCF_CACHE_LINE_NUM	(1ULL << CACHE_LINE_BITS)
 /**
  * Size of cache name
  */
@@ -92,6 +93,17 @@
 /**
  * @}
  */
+
+
+/*
+ * Maximum value of a composite volume member id
+ */
+#define OCF_COMPOSITE_VOLUME_MEMBERS_MAX 16
+/*
+ * Invalid value of composite volume member
+ */
+#define OCF_COMPOSITE_VOLUME_MEMBER_ID_INVALID OCF_COMPOSITE_VOLUME_MEMBERS_MAX
+
 
 /**
  * @name Miscellaneous defines

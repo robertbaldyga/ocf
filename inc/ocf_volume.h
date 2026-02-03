@@ -39,6 +39,9 @@ struct ocf_volume_uuid {
 struct ocf_volume_caps {
 	uint32_t atomic_writes : 1;
 		/*!< Volume supports atomic writes */
+
+	uint32_t composite_volume : 1;
+		/*!< Volume may be composed of multiple sub-volumes */
 };
 
 /**
@@ -210,6 +213,46 @@ struct ocf_volume_ops {
 	 * @return Maximum io size in bytes
 	 */
 	unsigned int (*get_max_io_size)(ocf_volume_t volume);
+
+	/**
+	 * @brief Add subvolume to composite volume
+	 *
+	 * @param[in] volume composite volume handle
+	 * @param[in] type type of added subvolume
+	 * @param[in] uuid UUID of added subvolume
+	 * @param[in] volume_params params to be passed to subvolume open
+	 *
+	 * @return Zero when success, othewise an error
+	 */
+	int (*composite_volume_add)(ocf_volume_t cvolume,
+			ocf_volume_type_t type, struct ocf_volume_uuid *uuid,
+			void *volume_params);
+
+	/**
+	 * @brief Add subvolume to composite volume
+	 *
+	 * @param[in] volume composite volume handle
+	 * @param[in] uuid UUID of added subvolume
+	 * @param[in] tgt_id Target subvolume id
+	 * @param[in] type type of added subvolume
+	 * @param[in] volume_params params to be passed to subvolume open
+	 *
+	 * @return Zero when success, othewise an error
+	 */
+	int (*composite_volume_attach_member)(ocf_volume_t volume,
+			struct ocf_volume_uuid *uuid, uint8_t tgt_id,
+			ocf_volume_type_t type, void *volume_params);
+
+	/**
+	 * @brief Detach composite member volume
+	 *
+	 * @param[in] volume composite volume handle
+	 * @param[in] subvolume_id volume to be detached
+	 *
+	 * @return Zero on success, otherwise error code
+	 */
+	int (*composite_volume_detach_member)(ocf_volume_t volume,
+			uint8_t subvolume_id);
 };
 
 /**
@@ -337,6 +380,15 @@ ocf_cache_t ocf_volume_get_cache(ocf_volume_t volume);
 int ocf_volume_is_atomic(ocf_volume_t volume);
 
 /**
+ * @brief Check if volume is composited of multiple sub-volumes
+ *
+ * @param[in] volume Volume
+ *
+ * @return True if volume is composite, otherwise false
+ */
+bool ocf_volume_is_composite(ocf_volume_t volume);
+
+/**
  * @brief Allocate new io
  *
  * @param[in] volume Volume
@@ -386,11 +438,36 @@ void ocf_volume_submit_discard(ocf_io_t io);
 int ocf_volume_open(ocf_volume_t volume, void *volume_params);
 
 /**
- * @brief Get volume max io size
+ * @brief Close volume
  *
  * @param[in] volume Volume
  */
 void ocf_volume_close(ocf_volume_t volume);
+
+/**
+ * @brief Add subvolume to composite volume
+ *
+ * @param[in] volume composite volume handle
+ * @param[in] tgt_id Target subvolume id
+ * @param[in] uuid UUID of added subvolume
+ * @param[in] type type of added subvolume
+ * @param[in] volume_params params to be passed to subvolume open
+ *
+ * @return Zero when success, othewise an error
+ */
+int ocf_composite_volume_attach_member(ocf_volume_t volume, ocf_uuid_t uuid,
+		uint8_t tgt_id, ocf_volume_type_t vol_type, void *vol_params);
+
+/**
+  * @brief Detach composite member volume
+  *
+  * @param[in] volume composite volume handle
+  * @param[in] subvolume_id volume to be detached
+  *
+  * @return Zero when success, othewise en error
+  */
+int ocf_composite_volume_detach_member(ocf_volume_t volume,
+		uint8_t subvolume_id);
 
 /**
  * @brief Get volume max io size
@@ -402,6 +479,19 @@ void ocf_volume_close(ocf_volume_t volume);
 unsigned int ocf_volume_get_max_io_size(ocf_volume_t volume);
 
 /**
+ * @brief Add subvolume to composite volume
+ *
+ * @param[in] volume composite volume handle
+ * @param[in] type type of added subvolume
+ * @param[in] uuid UUID of added subvolume
+ * @param[in] volume_params params to be passed to subvolume open
+ *
+ * @return Zero when success, othewise an error
+ */
+int ocf_composite_volume_add(ocf_volume_t volume, ocf_volume_type_t type,
+		struct ocf_volume_uuid *uuid, void *volume_params);
+
+/**
  * @brief Get volume length
  *
  * @param[in] volume Volume
@@ -409,5 +499,28 @@ unsigned int ocf_volume_get_max_io_size(ocf_volume_t volume);
  * @return Length of volume in bytes
  */
 uint64_t ocf_volume_get_length(ocf_volume_t volume);
+
+/*
+ * @brief Check if uuid instances contain the same data
+ *
+ * @param[in] a first uuid
+ * @param[in] b second uuid
+ * @param[out] diff 0 if equal, non-0 otherwise
+ *
+ * @retval 0 if comparison successful
+ * @retval other value if comparison failed
+ */
+static inline int ocf_uuid_compare(const struct ocf_volume_uuid * const a,
+		const struct ocf_volume_uuid * const b,
+		int *diff)
+{
+	if (a->size != b->size) {
+		*diff = -1;
+
+		return 0;
+	}
+
+	return env_memcmp(a->data, a->size, b->data, b->size, diff);
+}
 
 #endif /* __OCF_VOLUME_H__ */

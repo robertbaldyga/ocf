@@ -75,6 +75,9 @@ static void ocf_metadata_store_segment(ocf_pipeline_t pipeline,
 
 	ctrl = (struct ocf_metadata_ctrl *)cache->metadata.priv;
 
+	if (!context->ctrl->raw_desc[segment].mem_pool_limit)
+		OCF_PL_FINISH_RET(pipeline, -OCF_ERR_NO_MEM);
+
 	context->segment_copy[segment].mem_pool =
 		env_malloc(ctrl->raw_desc[segment].mem_pool_limit, ENV_MEM_NORMAL);
 	if (!context->segment_copy[segment].mem_pool)
@@ -547,6 +550,14 @@ void ocf_metadata_flush_superblock(ocf_cache_t cache,
 	OCF_DEBUG_TRACE(cache);
 
 	ENV_BUG_ON(!ocf_cache_is_device_attached(cache));
+
+	if (cache->metadata.is_volatile) {
+		/*
+		 * metadata ia volatile, no need to flush anything.
+		 */
+		cmpl(priv, 0);
+		return;
+	}
 
 	result = ocf_pipeline_create(&pipeline, cache,
 			&ocf_metadata_flush_sb_pipeline_props);

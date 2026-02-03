@@ -56,7 +56,7 @@ static int passive_io_resume(struct ocf_request *req)
 		overlap_page = overlap_start - raw_start_page;
 		overlap_count = overlap_end - overlap_start + 1;
 
-		ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin,
+		(void)ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin,
 				PAGES_TO_BYTES(overlap_start_data));
 		ocf_metadata_raw_update(cache, raw, req->data, overlap_page,
 				overlap_count);
@@ -76,6 +76,7 @@ static void passive_io_page_lock_acquired(struct ocf_request *req)
 int ocf_metadata_passive_update(struct ocf_request *master)
 {
 	ocf_cache_t cache = master->cache;
+	struct ocf_metadata_ctrl *ctrl = cache->metadata.priv;
 	uint64_t io_start_page = BYTES_TO_PAGES(master->addr);
 	uint64_t io_end_page = io_start_page + BYTES_TO_PAGES(master->bytes);
 	struct ocf_request *req;
@@ -86,7 +87,7 @@ int ocf_metadata_passive_update(struct ocf_request *master)
 		return 0;
 	}
 
-	if (io_start_page >= ocf_metadata_get_pages_count(cache)) {
+	if (io_start_page >= ctrl->count_pages) {
 		master->complete(master, 0);
 		return 0;
 	}

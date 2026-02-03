@@ -14,6 +14,9 @@
 #ifndef __OCF_STATS_H__
 #define __OCF_STATS_H__
 
+#include "ocf/ocf_prefetch_common.h"
+#include "ocf/ocf_feedback_counters_def.h"
+
 /**
  * Entire row of statistcs
  */
@@ -55,11 +58,13 @@ struct ocf_stats_usage {
  * ║ Request statistics   │ Count │   %   │ Units    ║
  * ╠══════════════════════╪═══════╪═══════╪══════════╣
  * ║ Read hits            │    10 │   4.5 │ Requests ║
+ * ║ Read deferred        │     0 │   0.0 │ Requests ║
  * ║ Read partial misses  │     1 │   0.5 │ Requests ║
  * ║ Read full misses     │   211 │  95.0 │ Requests ║
  * ║ Read total           │   222 │ 100.0 │ Requests ║
  * ╟──────────────────────┼───────┼───────┼──────────╢
  * ║ Write hits           │     0 │   0.0 │ Requests ║
+ * ║ Write deferred       │     0 │   0.0 │ Requests ║
  * ║ Write partial misses │     0 │   0.0 │ Requests ║
  * ║ Write full misses    │     0 │   0.0 │ Requests ║
  * ║ Write total          │     0 │   0.0 │ Requests ║
@@ -70,14 +75,23 @@ struct ocf_stats_usage {
  * ╟──────────────────────┼───────┼───────┼──────────╢
  * ║ Total requests       │   222 │ 100.0 │ Requests ║
  * ╚══════════════════════╧═══════╧═══════╧══════════╝
- * </pre>
+ *
+ * ╔═════════════════════╤═══════╤═══════╤══════════╗
+ * ║ Prefetch statistics │ Count │   %   │ Units    ║
+ * ╠═════════════════════╪═══════╪═══════╪══════════╣
+ * ║ Prefetch: stream    │     0 │   0.0 │ Requests ║
+ * ║ Prefetch total      │     0 │   0.0 │ Requests ║
+ * ╚═════════════════════╧═══════╧═══════╧══════════╝
+* </pre>
  */
 struct ocf_stats_requests {
 	struct ocf_stat rd_hits;
+	struct ocf_stat rd_deferred;
 	struct ocf_stat rd_partial_misses;
 	struct ocf_stat rd_full_misses;
 	struct ocf_stat rd_total;
 	struct ocf_stat wr_hits;
+	struct ocf_stat wr_deferred;
 	struct ocf_stat wr_partial_misses;
 	struct ocf_stat wr_full_misses;
 	struct ocf_stat wr_total;
@@ -85,6 +99,7 @@ struct ocf_stats_requests {
 	struct ocf_stat wr_pt;
 	struct ocf_stat serviced;
 	struct ocf_stat total;
+	struct ocf_stat prefetches[pa_id_num];
 };
 
 /**
@@ -122,6 +137,15 @@ struct ocf_stats_blocks {
 	struct ocf_stat pass_through_rd;
 	struct ocf_stat pass_through_wr;
 	struct ocf_stat pass_through_total;
+	struct ocf_stat prefetch_core_rd[pa_id_num];
+	struct ocf_stat prefetch_cache_rd[pa_id_num];
+	struct ocf_stat prefetch_cache_wr[pa_id_num];
+	#define X(cnt) struct ocf_stat ocf_alg_##cnt[pa_id_num];
+		OCF_CNT_CACHE_ALG
+	#undef X
+	#define X(cnt) struct ocf_stat ocf_feedback_##cnt;
+		OCF_CNT_CACHE_GLB
+	#undef X
 };
 
 /**

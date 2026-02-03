@@ -40,7 +40,7 @@ static void _raw_atomic_io_discard_cmpl(struct ocf_request *req, int error)
 		ocf_metadata_error(req->cache);
 
 	/* Call metadata flush completed call back */
-	OCF_DEBUG_MSG(ctx->req->cache, "Asynchronous flushing complete");
+	OCF_DEBUG_MSG(cache, "Asynchronous flushing complete");
 
 	complete(req, error);
 }
@@ -50,8 +50,8 @@ static void _raw_atomic_io_discard_do(struct ocf_request *req,
 {
 	ocf_cache_t cache = req->cache;
 
-	OCF_DEBUG_PARAM(cache, "Page to flushing = %" ENV_PRIu64 ", count of pages = %u",
-			start_addr, len);
+	OCF_DEBUG_PARAM(cache, "Page to flushing = %u, count of pages = %u",
+			start_line, len);
 
 	if (cache->device->volume.features.discard_zeroes)
 		ocf_req_forward_cache_discard(req, start_addr, len);
@@ -90,9 +90,9 @@ static void _raw_atomic_flush_do_asynch_sec(struct ocf_cache *cache,
 	start_addr *= ocf_line_size(cache);
 	start_addr += cache->device->metadata_offset;
 
-	start_addr += SECTORS_TO_BYTES(map->start_flush);
-	len = SECTORS_TO_BYTES(map->stop_flush - map->start_flush);
-	len += SECTORS_TO_BYTES(1);
+	start_addr += PAGES_TO_BYTES(map->start_flush);
+	len = PAGES_TO_BYTES(map->stop_flush - map->start_flush);
+	len += PAGES_TO_BYTES(1);
 
 	_raw_atomic_io_discard_do(req, start_addr, len);
 }

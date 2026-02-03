@@ -25,6 +25,8 @@
 #include "../ocf_request.h"
 #include "../metadata/metadata.h"
 #include "../ocf_space.h"
+#include "ocf/ocf_blktrace.h"
+#include "../prefetch/ocf_classifier.h"
 
 enum ocf_io_if_type {
 	/* Public OCF IO interfaces to be set by user */
@@ -154,24 +156,17 @@ bool ocf_fallback_pt_is_on(ocf_cache_t cache)
 void ocf_resolve_effective_cache_mode(ocf_cache_t cache,
 		ocf_core_t core, struct ocf_request *req)
 {
-	ocf_cache_mode_t cache_mode;
-
 	if (ocf_fallback_pt_is_on(cache)){
 		req->cache_mode = ocf_req_cache_mode_pt;
 		return;
 	}
 
-	if (unlikely(env_atomic_read(&cache->attach_pt))) {
+	if (!ocf_req_is_4k(req->addr, req->bytes)) {
 		req->cache_mode = ocf_req_cache_mode_pt;
 		return;
 	}
 
-	if (cache->pt_unaligned_io && !ocf_req_is_4k(req->addr, req->bytes)) {
-		req->cache_mode = ocf_req_cache_mode_pt;
-		return;
-	}
-
-	if (unlikely(req->core_line_count > cache->conf_meta->cachelines)) {
+	if (req->core_line_count > ocf_cache_get_line_count(cache)) {
 		req->cache_mode = ocf_req_cache_mode_pt;
 		return;
 	}
@@ -182,13 +177,12 @@ void ocf_resolve_effective_cache_mode(ocf_cache_t cache,
 		return;
 	}
 
-	cache_mode = ocf_user_part_get_cache_mode(cache,
-			ocf_user_part_class2id(cache, req->part_id));
+	req->cache_mode = ocf_user_part_get_cache_mode(cache,
+				ocf_user_part_class2id(cache, req->part_id));
+	if (!ocf_cache_mode_is_valid(req->cache_mode))
+		req->cache_mode = ocf_cache_get_mode(cache);
 
-	if (!ocf_cache_mode_is_valid(cache_mode))
-		cache_mode = cache->conf_meta->cache_mode;
-
-	req->cache_mode = ocf_cache_mode_to_req_cache_mode(cache_mode);
+	ocf_classifier(req);
 
 	if (req->rw == OCF_WRITE &&
 	    ocf_req_cache_mode_has_lazy_write(req->cache_mode) &&

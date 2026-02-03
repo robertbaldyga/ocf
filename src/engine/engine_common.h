@@ -9,6 +9,7 @@
 
 #include "../ocf_request.h"
 #include "../utils/utils_cache_line.h"
+#include "../prefetch/ocf_prefetch.h"
 
 /**
  * @file engine_common.h
@@ -223,6 +224,13 @@ struct ocf_engine_callbacks
 };
 
 /**
+ * @brief Prepare cache lines for miss request
+ *
+ * @param req OCF request
+ */
+void ocf_prepare_clines_miss(struct ocf_request *req);
+
+/**
  * @brief Map and lock cachelines
  *
  * @param req OCF request
@@ -295,5 +303,7 @@ void inc_fallback_pt_error_counter(ocf_cache_t cache);
 void ocf_engine_on_resume(struct ocf_request *req);
 
 void ocf_engine_set_hot(struct ocf_request *req);
+
+void ocf_engine_update_pf(struct ocf_request *req);
 
 #endif /* ENGINE_COMMON_H_ */

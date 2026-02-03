@@ -14,12 +14,7 @@ struct ocf_thread_priv;
 #define LOOKUP_HIT 5
 #define LOOKUP_MISS 6
 #define LOOKUP_REMAPPED 8
-
-static inline ocf_req_cache_mode_t ocf_cache_mode_to_req_cache_mode(
-		ocf_cache_mode_t mode)
-{
-	return (ocf_req_cache_mode_t)mode;
-}
+#define LOOKUP_HIT_INVALID 9
 
 struct ocf_io_if {
 	ocf_req_cb cbs[2]; /* READ and WRITE */
@@ -31,6 +26,9 @@ void ocf_resolve_effective_cache_mode(ocf_cache_t cache,
 		ocf_core_t core, struct ocf_request *req);
 
 const char *ocf_get_io_iface_name(ocf_req_cache_mode_t cache_mode);
+
+ocf_req_cb ocf_cache_mode_to_engine_cb(ocf_req_cache_mode_t req_cache_mode,
+					  int rw);
 
 bool ocf_req_cache_mode_has_lazy_write(ocf_req_cache_mode_t mode);
 

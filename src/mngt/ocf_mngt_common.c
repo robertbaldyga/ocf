@@ -17,18 +17,27 @@
 #include "../ocf_logger_priv.h"
 #include "../ocf_queue_priv.h"
 #include "../engine/engine_common.h"
+#include "../prefetch/ocf_prefetch.h"
+#include "../prefetch/ocf_classifier.h"
 
 /* Close if opened */
 void cache_mngt_core_deinit(ocf_core_t core)
 {
 	if (core->opened) {
-		ocf_volume_close(&core->front_volume);
 		ocf_volume_deinit(&core->front_volume);
-		ocf_volume_close(&core->volume);
+		ocf_volume_close(core->volume);
+
+		ocf_prefetch_destroy(core);
+
+		#define X(classifier)	ocf_classifier_destroy_##classifier(core);
+		OCF_CLASSIFIER_HANDLERS_X
+		#undef X
 	}
 
-	if (core->has_volume)
-		ocf_volume_deinit(&core->volume);
+	if (core->has_volume) {
+		ocf_volume_destroy(core->volume);
+		core->volume = NULL;
+	}
 
 	core->opened = false;
 }
@@ -343,6 +352,62 @@ void ocf_mngt_cache_lock(ocf_cache_t cache,
 			ocf_async_lock, ocf_async_unlock);
 }
 
+struct cache_ml_lock_ctx {
+	ocf_mngt_cache_lock_end_t cmpl;
+	void *priv;
+};
+
+static inline void cache_ml_lock_next_cmpl(ocf_cache_t cache, void *priv,
+		int error)
+{
+	struct cache_ml_lock_ctx *ctx = priv;
+
+	if (error) {
+		while (cache->lower_cache) {
+			ocf_mngt_cache_unlock(cache->lower_cache);
+			cache = cache->lower_cache;
+		}
+		ctx->cmpl(ocf_cache_ml_get_lowest_cache(cache), ctx->priv,
+					error);
+		env_free(ctx);
+		return;
+	}
+
+	if (cache->upper_cache) {
+		_ocf_mngt_cache_lock(cache->upper_cache,
+				cache_ml_lock_next_cmpl, ctx,
+				ocf_async_lock, ocf_async_unlock);
+		return;
+	}
+
+	ctx->cmpl(ocf_cache_ml_get_lowest_cache(cache), ctx->priv,
+				error);
+	env_free(ctx);
+}
+
+void ocf_mngt_cache_ml_lock(ocf_cache_t main_cache,
+		ocf_mngt_cache_lock_end_t cmpl, void *priv)
+{
+	struct cache_ml_lock_ctx *ctx;
+
+	OCF_CHECK_NULL(main_cache);
+
+	if (!ocf_cache_ml_is_main(main_cache))
+		cmpl(main_cache, priv, -OCF_ERR_CACHE_NOT_MAIN);
+
+	ctx = env_malloc(sizeof(struct cache_ml_lock_ctx), ENV_MEM_NORMAL);
+	if (!ctx) {
+		cmpl(main_cache, priv, -OCF_ERR_NO_MEM);
+		return;
+	}
+
+	ctx->cmpl = cmpl;
+	ctx->priv = priv;
+
+	_ocf_mngt_cache_lock(main_cache, cache_ml_lock_next_cmpl, ctx,
+			ocf_async_lock, ocf_async_unlock);
+}
+
 int ocf_mngt_cache_trylock(ocf_cache_t cache)
 {
 	OCF_CHECK_NULL(cache);
@@ -358,12 +423,78 @@ void ocf_mngt_cache_unlock(ocf_cache_t cache)
 	_ocf_mngt_cache_unlock(cache, ocf_async_unlock);
 }
 
+void ocf_mngt_cache_ml_unlock(ocf_cache_t main_cache)
+{
+	ocf_cache_t cache;
+
+	OCF_CHECK_NULL(main_cache);
+
+	ENV_BUG_ON(!ocf_cache_ml_is_main(main_cache));
+
+	cache = ocf_cache_ml_get_highest_cache(main_cache);
+	do {
+		_ocf_mngt_cache_unlock(cache, ocf_async_unlock);
+		cache = ocf_cache_ml_get_lower_cache(cache);
+	} while (cache);
+}
+
 void ocf_mngt_cache_read_lock(ocf_cache_t cache,
 		ocf_mngt_cache_lock_end_t cmpl, void *priv)
 {
 	OCF_CHECK_NULL(cache);
 
 	_ocf_mngt_cache_lock(cache, cmpl, priv,
+			ocf_async_read_lock, ocf_async_read_unlock);
+}
+
+static inline void cache_ml_read_lock_next_cmpl(ocf_cache_t cache, void *priv,
+		int error)
+{
+	struct cache_ml_lock_ctx *ctx = priv;
+
+	if (error) {
+		while (cache->lower_cache) {
+			ocf_mngt_cache_unlock(cache->lower_cache);
+			cache = cache->lower_cache;
+		}
+		ctx->cmpl(ocf_cache_ml_get_lowest_cache(cache), ctx->priv,
+					error);
+		env_free(ctx);
+		return;
+	}
+
+	if (cache->upper_cache) {
+		_ocf_mngt_cache_lock(cache->upper_cache,
+				cache_ml_read_lock_next_cmpl, ctx,
+				ocf_async_read_lock, ocf_async_read_unlock);
+		return;
+	}
+
+	ctx->cmpl(ocf_cache_ml_get_lowest_cache(cache), ctx->priv,
+				error);
+	env_free(ctx);
+}
+
+void ocf_mngt_cache_ml_read_lock(ocf_cache_t main_cache,
+		ocf_mngt_cache_lock_end_t cmpl, void *priv)
+{
+	struct cache_ml_lock_ctx *ctx;
+
+	OCF_CHECK_NULL(main_cache);
+
+	if (!ocf_cache_ml_is_main(main_cache))
+		cmpl(main_cache, priv, -OCF_ERR_CACHE_NOT_MAIN);
+
+	ctx = env_malloc(sizeof(struct cache_ml_lock_ctx), ENV_MEM_NORMAL);
+	if (!ctx) {
+		cmpl(main_cache, priv, -OCF_ERR_NO_MEM);
+		return;
+	}
+
+	ctx->cmpl = cmpl;
+	ctx->priv = priv;
+
+	_ocf_mngt_cache_lock(main_cache, cache_ml_read_lock_next_cmpl, ctx,
 			ocf_async_read_lock, ocf_async_read_unlock);
 }
 
@@ -380,6 +511,21 @@ void ocf_mngt_cache_read_unlock(ocf_cache_t cache)
 	OCF_CHECK_NULL(cache);
 
 	_ocf_mngt_cache_unlock(cache, ocf_async_read_unlock);
+}
+
+void ocf_mngt_cache_ml_read_unlock(ocf_cache_t main_cache)
+{
+	ocf_cache_t cache;
+
+	OCF_CHECK_NULL(main_cache);
+
+	ENV_BUG_ON(!ocf_cache_ml_is_main(main_cache));
+
+	cache = ocf_cache_ml_get_highest_cache(main_cache);
+	do {
+		_ocf_mngt_cache_unlock(cache, ocf_async_read_unlock);
+		cache = ocf_cache_ml_get_lower_cache(cache);
+	} while (cache);
 }
 
 bool ocf_mngt_cache_is_locked(ocf_cache_t cache)
@@ -514,6 +660,61 @@ int ocf_mngt_cache_visit_reverse(ocf_ctx_t ocf_ctx,
 	env_vfree(list);
 
 	return result;
+}
+
+static int _ocf_mngt_cache_ml_visit(ocf_cache_t cache,
+		ocf_mngt_cache_ml_visitor_t visitor,
+		ocf_mngt_cache_ml_visitor_t rollback_visitor,
+		void *priv, bool start_from_top)
+{
+	ocf_cache_t cur = cache;
+	int result;
+
+	OCF_CHECK_NULL(cache);
+	OCF_CHECK_NULL(visitor);
+
+	if (!ocf_cache_ml_is_main(cache))
+		return -OCF_ERR_CACHE_NOT_MAIN;
+
+	if (start_from_top)
+		cur = ocf_cache_ml_get_highest_cache(cache);
+
+	while (cur != NULL) {
+		result = visitor(cur, priv);
+		if (result)
+			break;
+
+		cur = start_from_top ? cur->lower_cache : cur->upper_cache;
+	}
+
+	if (result && rollback_visitor) {
+		cur = start_from_top ? cur->upper_cache : cur->lower_cache;
+
+		while (cur != NULL) {
+			rollback_visitor(cur, priv);
+			cur = start_from_top ? cur->upper_cache : cur->lower_cache;
+		}
+	}
+
+	return result;
+}
+
+int ocf_mngt_cache_ml_visit_from_top(ocf_cache_t cache,
+		ocf_mngt_cache_ml_visitor_t visitor,
+		ocf_mngt_cache_ml_visitor_t rollback_visitor,
+		void *priv)
+{
+	return _ocf_mngt_cache_ml_visit(cache, visitor, rollback_visitor, priv,
+			true);
+}
+
+int ocf_mngt_cache_ml_visit_from_bottom(ocf_cache_t cache,
+		ocf_mngt_cache_ml_visitor_t visitor,
+		ocf_mngt_cache_ml_visitor_t rollback_visitor,
+		void *priv)
+{
+	return _ocf_mngt_cache_ml_visit(cache, visitor, rollback_visitor, priv,
+			false);
 }
 
 static void _ocf_mngt_continue_pipeline_on_zero_refcnt_cb(void *priv)

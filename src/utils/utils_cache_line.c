@@ -12,34 +12,70 @@ static void __set_cache_line_invalid(struct ocf_cache *cache, uint8_t start_bit,
 		ocf_core_id_t core_id, ocf_part_id_t part_id)
 {
 	ocf_core_t core;
-	bool line_remains_valid, line_became_invalid;
+	bool is_valid;
 
 	ENV_BUG_ON(core_id >= OCF_CORE_MAX);
 	core = ocf_cache_get_core(cache, core_id);
 
-	line_became_invalid = metadata_clear_valid_sec_changed(cache, line,
-			start_bit, end_bit, &line_remains_valid);
-
-	if (line_remains_valid) {
-		ENV_BUG_ON(line_became_invalid);
-		return;
+	if (metadata_clear_valid_sec_changed(cache, line, start_bit, end_bit,
+			&is_valid)) {
+		/*
+		 * Update the number of cached data for that core object
+		 */
+		env_atomic_dec(&core->runtime_meta->cached_clines);
+		env_atomic_dec(&core->runtime_meta->
+				part_counters[part_id].cached_clines);
 	}
 
-	/* If there are any waiters, don't transfer the line to the freelist.
-	 * The new owner will take care about the repart anyways
+	/* If we have waiters, do not remove cache line
+	 * for this cache line which will use one, clear
+	 * only valid bits
 	 */
-	if (ocf_cache_line_are_waiters(ocf_cache_line_concurrency(cache), line))
-		return;
+	if (!is_valid && !ocf_cache_line_are_waiters(
+			ocf_cache_line_concurrency(cache), line)) {
+		ocf_lru_rm_cline(cache, line);
+		ocf_metadata_remove_cache_line(cache, line);
+	}
+}
 
-	ocf_lru_rm_cline(cache, line);
-	ocf_metadata_remove_cache_line(cache, line);
+static void __detach_cache_line(struct ocf_cache *cache, uint8_t start_bit,
+		uint8_t end_bit, ocf_cache_line_t line,
+		ocf_core_id_t core_id, ocf_part_id_t part_id)
+{
+	ocf_core_t core;
+	bool is_valid;
+	struct ocf_part *part;
 
-	if (!line_became_invalid)
-		return;
+	ENV_BUG_ON(part_id == PARTITION_FREELIST && core_id != OCF_CORE_MAX);
+	ENV_BUG_ON(part_id != PARTITION_FREELIST && core_id == OCF_CORE_MAX);
 
-	env_atomic_dec(&core->runtime_meta->cached_clines);
-	env_atomic_dec(&core->runtime_meta->
-			part_counters[part_id].cached_clines);
+	if (part_id != PARTITION_FREELIST)
+		part = &cache->user_parts[part_id].part;
+	else
+		part = &cache->free;
+
+	if (core_id == OCF_CORE_MAX)
+		goto delete_invalid;
+
+	if (metadata_clear_valid_sec_changed(cache, line, start_bit, end_bit,
+			&is_valid)) {
+		/*
+		 * Update the number of cached data for that core object
+		 */
+		core = ocf_cache_get_core(cache, core_id);
+		env_atomic_dec(&core->runtime_meta->cached_clines);
+		env_atomic_dec(&core->runtime_meta->
+				part_counters[part_id].cached_clines);
+	}
+
+	ENV_BUG_ON(ocf_cache_line_are_waiters(
+				ocf_cache_line_concurrency(cache), line));
+
+	if (!is_valid)
+		ocf_metadata_remove_cache_line(cache, line);
+delete_invalid:
+	//Even if the cache line was on the freelist, it must be set as unavailable
+	ocf_lru_detach(cache, part, line);
 }
 
 void set_cache_line_invalid(struct ocf_cache *cache, uint8_t start_bit,
@@ -59,6 +95,23 @@ void set_cache_line_invalid(struct ocf_cache *cache, uint8_t start_bit,
 
 	ocf_metadata_flush_mark(cache, req, map_idx, INVALID, start_bit,
 			end_bit);
+}
+
+void set_cache_line_available(struct ocf_cache *cache, ocf_cache_line_t line)
+{
+	ocf_lru_restore(cache, line);
+}
+
+void set_cache_line_unavailable(struct ocf_cache *cache, uint8_t start_bit,
+		uint8_t end_bit, ocf_cache_line_t line)
+{
+	ocf_part_id_t part_id;
+	ocf_core_id_t core_id;
+
+	ocf_metadata_get_core_and_part_id(cache, line, &core_id, &part_id);
+
+	__detach_cache_line(cache, start_bit, end_bit, line, core_id,
+			part_id);
 }
 
 void set_cache_line_invalid_no_flush(struct ocf_cache *cache, uint8_t start_bit,

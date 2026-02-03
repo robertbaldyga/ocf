@@ -431,19 +431,19 @@ static void _ocf_cleaner_core_io_for_dirty_range(struct ocf_request *req,
 			iter->coll_idx);
 
 	addr = (ocf_line_size(cache) * iter->core_line)
-			+ SECTORS_TO_BYTES(begin);
+			+ PAGES_TO_BYTES(begin);
 	offset = (ocf_line_size(cache) * iter->hash)
-			+ SECTORS_TO_BYTES(begin);
+			+ PAGES_TO_BYTES(begin);
 
 	ocf_core_stats_core_block_update(req->core, part_id, OCF_WRITE,
-			SECTORS_TO_BYTES(end - begin));
+			PAGES_TO_BYTES(end - begin), pa_id_none);
 
 	OCF_DEBUG_PARAM(req->cache, "Core write, line = %llu, "
 			"sector = %llu, count = %llu", iter->core_line, begin,
 			end - begin);
 
 	ocf_req_forward_core_io(req, OCF_WRITE, addr,
-			SECTORS_TO_BYTES(end - begin), offset);
+			PAGES_TO_BYTES(end - begin), offset);
 }
 
 static void _ocf_cleaner_core_submit_io(struct ocf_request *req,

@@ -28,9 +28,8 @@ static void _ocf_discard_complete_req(struct ocf_request *req, int error)
 
 static int _ocf_discard_core(struct ocf_request *req)
 {
-	req->addr = SECTORS_TO_BYTES(req->discard.sector);
-	req->bytes = SECTORS_TO_BYTES(req->discard.nr_sects);
-
+	req->addr = req->discard.addr;
+	req->bytes = req->discard.bytes;
 	ocf_engine_forward_core_discard_req(req, _ocf_discard_complete_req);
 
 	return 0;
@@ -60,9 +59,7 @@ static int _ocf_discard_step(struct ocf_request *req);
 
 static void _ocf_discard_finish_step(struct ocf_request *req)
 {
-	req->discard.handled += BYTES_TO_SECTORS(req->bytes);
-
-	if (req->discard.handled < req->discard.nr_sects)
+	if (req->discard.handled < req->discard.bytes)
 		req->engine_handler = _ocf_discard_step;
 	else if (!req->cache->metadata.is_volatile)
 		req->engine_handler = _ocf_discard_flush_cache;
@@ -144,20 +141,45 @@ static void _ocf_discard_on_resume(struct ocf_request *req)
 
 static int _ocf_discard_step(struct ocf_request *req)
 {
-	int lock;
 	struct ocf_cache *cache = req->cache;
+	uint64_t addr, bytes, reminder;
+	int lock;
 
 	OCF_DEBUG_TRACE(req->cache);
 
-	req->addr = SECTORS_TO_BYTES(req->discard.sector +
-			req->discard.handled);
-	req->bytes = OCF_MIN(SECTORS_TO_BYTES(req->discard.nr_sects -
-			req->discard.handled), MAX_TRIM_RQ_SIZE);
-	req->core_line_first = ocf_bytes_2_lines(cache, req->addr);
-	req->core_line_last =
-		ocf_bytes_2_lines(cache, req->addr + req->bytes - 1);
+	if (req->discard.bytes < ocf_line_size(cache)) {
+		req->discard.handled = req->discard.bytes;
+		_ocf_discard_finish_step(req);
+		return 0;
+	}
+
+	addr = req->discard.addr + req->discard.handled;
+	reminder = addr % ocf_line_size(cache);
+	if (reminder) {
+		addr += ocf_line_size(cache) - reminder;
+		req->discard.handled += ocf_line_size(cache) - reminder;
+	}
+
+	bytes = OCF_MIN(req->discard.bytes - req->discard.handled, MAX_TRIM_RQ_SIZE);
+	reminder = bytes % ocf_line_size(cache);
+	if (reminder) {
+		bytes -= reminder;
+		req->discard.handled += reminder;
+	}
+
+	if (req->discard.handled == req->discard.bytes) {
+		_ocf_discard_finish_step(req);
+		return 0;
+	}
+
+	req->addr = addr;
+	req->bytes = bytes;
+	req->core_line_first = ocf_bytes_2_lines(cache, addr);
+	req->core_line_last = ocf_bytes_2_lines(cache, addr + bytes - 1);
 	req->core_line_count = req->core_line_last - req->core_line_first + 1;
 	req->engine_handler = _ocf_discard_step_do;
+
+	req->discard.handled += bytes;
 
 	ENV_BUG_ON(env_memset(req->map, sizeof(*req->map) * req->core_line_count,
 			0));
@@ -166,7 +188,7 @@ static int _ocf_discard_step(struct ocf_request *req)
 	ocf_hb_req_prot_lock_rd(req);
 
 	/* Travers to check if request is mapped fully */
-	ocf_engine_lookup(req);
+	ocf_engine_traverse(req);
 
 	if (ocf_engine_mapped_count(req)) {
 		/* Some cache line are mapped, lock request for WRITE access */

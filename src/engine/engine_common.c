@@ -19,6 +19,10 @@
 #include "../ocf_space.h"
 #include "../promotion/promotion.h"
 #include "../concurrency/ocf_concurrency.h"
+#include "../concurrency/ocf_metadata_concurrency.h"
+#include "../prefetch/ocf_metadata_algid.h"
+#include "ocf/ocf_blktrace.h"
+#include "ocf/ocf_feedback_counters.h"
 
 void ocf_engine_error(struct ocf_request *req,
 		bool stop_cache, const char *msg)
@@ -143,7 +147,8 @@ static void ocf_engine_update_req_info(struct ocf_cache *cache,
 
 	ENV_BUG_ON(entry->status != LOOKUP_HIT &&
 			entry->status != LOOKUP_MISS &&
-			entry->status != LOOKUP_REMAPPED);
+			entry->status != LOOKUP_REMAPPED &&
+			entry->status != LOOKUP_HIT_INVALID);
 
 	/* Handle return value */
 	if (entry->status == LOOKUP_HIT) {
@@ -152,6 +157,7 @@ static void ocf_engine_update_req_info(struct ocf_cache *cache,
 			req->info.hit_no++;
 		} else {
 			req->info.invalid_no++;
+			entry->status = LOOKUP_HIT_INVALID;
 		}
 
 		/* Check request is dirty */
@@ -165,7 +171,7 @@ static void ocf_engine_update_req_info(struct ocf_cache *cache,
 		}
 	}
 
-	if (entry->status == LOOKUP_HIT || entry->status == LOOKUP_REMAPPED) {
+	if (entry->status == LOOKUP_HIT || entry->status == LOOKUP_HIT_INVALID || entry->status == LOOKUP_REMAPPED) {
 		if (req->part_id != ocf_metadata_get_partition_id(cache,
 				entry->coll_idx)) {
 			/*
@@ -187,12 +193,31 @@ static void ocf_engine_update_req_info(struct ocf_cache *cache,
 
 void ocf_engine_set_hot(struct ocf_request *req)
 {
-	struct ocf_cache *cache = req->cache;
+	ocf_cache_t cache = req->cache;
 	struct ocf_map_info *entry;
 	uint8_t status;
 	unsigned i;
 
+	for (i = 0; i < req->core_line_count; i++) {
+		entry = &(req->map[i]);
+		status = entry->status;
+
+		if (status == LOOKUP_HIT || status == LOOKUP_HIT_INVALID)
+			ocf_lru_hot_cline(cache, entry->coll_idx);
+	}
+}
+
+void ocf_engine_update_pf(struct ocf_request *req)
+{
+	struct ocf_cache *cache = req->cache;
+	ocf_core_t core = req->core;
+	struct ocf_map_info *entry;
+	uint8_t status;
+	pf_algo_id_t pa_id;
+	unsigned i;
+
 	if (req->info.hit_no == 0 && req->info.invalid_no == 0) {
+		ocf_cache_feedback_counters_core_req_promote(core, req);
 		/* no previously mapped clines */
 		return;
 	}
@@ -201,11 +226,29 @@ void ocf_engine_set_hot(struct ocf_request *req)
 		entry = &(req->map[i]);
 		status = entry->status;
 
-		if (status == LOOKUP_HIT) {
-			/* Update eviction (LRU) */
-			ocf_lru_hot_cline(cache, entry->coll_idx);
+		if (status == LOOKUP_HIT || status == LOOKUP_HIT_INVALID) {
+			pa_id = ocf_metadata_get_algorithm_id(cache, entry->coll_idx);
+			/* count for prefetchers or admission */
+
+			if (req->rw == OCF_READ) {
+				/* if read - good algorithm (TP), well done! */
+				ocf_cache_feedback_counters_req_cache_read_blocks_inc(
+					core, req, pa_id);
+			} else {
+				/* if overwrite - bad algorithm (FP), no need to read data which is
+				 * overwritten soon */
+				ocf_cache_feedback_counters_req_cache_overwritten_blocks_inc(
+					core, req, pa_id);
+			}
+
+			/* override algorithm id on cacheline metadata (avoid second feedback and
+			 * eviction feedback for original algorithm, e.g., prefetch).
+			 */
+			ocf_metadata_set_algorithm_id(cache, entry->coll_idx, req->io.pa_id);
 		}
 	}
+
+	ocf_cache_feedback_counters_core_req_promote(core, req);
 }
 
 void ocf_engine_lookup(struct ocf_request *req)
@@ -228,12 +271,6 @@ void ocf_engine_lookup(struct ocf_request *req)
 		ocf_engine_lookup_map_entry(cache, entry, core_id,
 				core_line);
 
-		/*
-		 * The flag could have been set on the previous lookup, but
-		 * cache line might be remapped in the meantime.
-		 */
-		entry->re_part = false;
-
 		if (entry->status != LOOKUP_HIT) {
 			/* There is miss then lookup for next map entry */
 			OCF_DEBUG_PARAM(cache, "Miss, core line = %llu",
@@ -254,6 +291,7 @@ void ocf_engine_traverse(struct ocf_request *req)
 {
 	ocf_engine_lookup(req);
 	ocf_engine_set_hot(req);
+	ocf_engine_update_pf(req);
 }
 
 int ocf_engine_check(struct ocf_request *req)
@@ -273,11 +311,6 @@ int ocf_engine_check(struct ocf_request *req)
 			core_line <= req->core_line_last; core_line++, i++) {
 
 		struct ocf_map_info *entry = &(req->map[i]);
-		/*
-		 * The flag could have been set on the previous traverse, but
-		 * cache line might be remapped in the meantime.
-		 */
-		entry->re_part = false;
 
 		if (entry->status == LOOKUP_MISS) {
 			continue;
@@ -326,6 +359,9 @@ void ocf_map_cache_line(struct ocf_request *req,
 	ocf_cleaning_init_cache_block(cache, cache_line);
 
 	req->map[idx].coll_idx = cache_line;
+
+	/* set algorithm id on cacheline metadata */
+	ocf_metadata_set_algorithm_id(cache, cache_line, req->io.pa_id);
 }
 
 
@@ -341,6 +377,7 @@ static void ocf_engine_map_hndl_error(struct ocf_cache *cache,
 
 		switch (entry->status) {
 		case LOOKUP_HIT:
+		case LOOKUP_HIT_INVALID:
 		case LOOKUP_MISS:
 			break;
 
@@ -437,7 +474,6 @@ static int lock_clines(struct ocf_request *req)
  * Caller must assure that request map info is up to date (request
  * is traversed).
  */
-static inline void ocf_prepare_clines_miss(struct ocf_request *req)
 {
 	bool part_has_space;
 
@@ -463,6 +499,7 @@ int ocf_engine_prepare_clines(struct ocf_request *req)
 	bool mapped;
 	bool promote = true;
 	int lock = -OCF_ERR_NO_LOCK;
+	ocf_part_id_t part_id;
 
 	/* requests to disabled partitions go in pass-through */
 	if (!ocf_user_part_is_enabled(user_part)) {
@@ -484,10 +521,12 @@ int ocf_engine_prepare_clines(struct ocf_request *req)
 	mapped = ocf_engine_is_mapped(req);
 	if (mapped) {
 		lock = lock_clines(req);
-		if (lock < 0)
+		if (lock < 0) {
 			ocf_req_set_mapping_error(req);
-		else
+		} else {
 			ocf_engine_set_hot(req);
+			ocf_engine_update_pf(req);
+		}
 		ocf_hb_req_prot_unlock_rd(req);
 		return lock;
 	}
@@ -510,6 +549,7 @@ int ocf_engine_prepare_clines(struct ocf_request *req)
 	if (unlikely(ocf_engine_is_mapped(req))) {
 		lock = lock_clines(req);
 		ocf_engine_set_hot(req);
+		ocf_engine_update_pf(req);
 		ocf_hb_req_prot_unlock_wr(req);
 		return lock;
 	}
@@ -524,14 +564,20 @@ int ocf_engine_prepare_clines(struct ocf_request *req)
 		}
 	}
 
-	if (!ocf_req_test_mapping_error(req))
+	if (!ocf_req_test_mapping_error(req)) {
 		ocf_engine_set_hot(req);
+		ocf_engine_update_pf(req);
+	}
 
 	ocf_hb_req_prot_unlock_wr(req);
 
 	if (ocf_req_is_cleaning_required(req)) {
-		ocf_lru_clean(req->cache, user_part, req->io_queue,
+		for_each_user_part(req->cache, user_part, part_id) {
+			if (!ocf_user_part_is_valid(user_part))
+				continue;
+			ocf_lru_clean(req->cache, user_part, req->io_queue,
 				128);
+		}
 	}
 
 	return lock;
@@ -548,7 +594,7 @@ static int _ocf_engine_clean_getter(struct ocf_cache *cache,
 
 	entry = &req->map[item];
 
-	if (entry->status != LOOKUP_HIT)
+	if (entry->status != LOOKUP_HIT && entry->status != LOOKUP_HIT_INVALID)
 		return -1;
 
 	if (!metadata_test_dirty(cache, entry->coll_idx))
@@ -582,14 +628,18 @@ void ocf_engine_clean(struct ocf_request *req)
 void ocf_engine_update_block_stats(struct ocf_request *req)
 {
 	ocf_core_stats_vol_block_update(req->core, req->part_id, req->rw,
-			req->bytes);
+			req->bytes, req->io.pa_id);
 }
 
+/* OCF: Count deferred requests as full miss. Otherwise, it may increase the
+ * number of hits, while the overall performance has not been improved.
+ * This way, the hit rate is more correlated with the performance changes.
+ */
 void ocf_engine_update_request_stats(struct ocf_request *req)
 {
 	ocf_core_stats_request_update(req->core, req->part_id, req->rw,
-			req->is_deferred ? 0 : req->info.hit_no,
-			req->core_line_count);
+			req->info.hit_no, req->core_line_count,
+			req->io.pa_id, req->is_deferred);
 }
 
 void inc_fallback_pt_error_counter(ocf_cache_t cache)

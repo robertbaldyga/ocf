@@ -9,6 +9,7 @@
 
 #include "ocf_cache.h"
 #include "ocf_core.h"
+#include "prefetch/ocf_classifier_common.h"
 
 /**
  * @file
@@ -163,6 +164,29 @@ void ocf_mngt_cache_read_lock(ocf_cache_t cache,
 		ocf_mngt_cache_lock_end_t cmpl, void *priv);
 
 /**
+ * @brief Lock multilevel cache configuration for management oparations (write
+ * lock, exclusive)
+ *
+ * @param[in] main_cache Handle to main cache
+ * @param[in] cmpl Completion callback
+ * @param[in] priv Private context of completion callback
+ */
+void ocf_mngt_cache_ml_lock(ocf_cache_t main_cache,
+		ocf_mngt_cache_lock_end_t cmpl, void *priv);
+
+/**
+ * @brief Lock multilevel cache configuration for read - assures cache config
+ *		does not change while lock is being held, while allowing other
+ *		users to acquire read lock in parallel.
+ *
+ * @param[in] main_cache Handle to main cache
+ * @param[in] cmpl Completion callback
+ * @param[in] priv Private context of completion callback
+ */
+void ocf_mngt_cache_ml_read_lock(ocf_cache_t main_cache,
+		ocf_mngt_cache_lock_end_t cmpl, void *priv);
+
+/**
  * @brief Lock cache for management oparations (write lock, exclusive)
  *
  * @param[in] cache Handle to cache
@@ -201,6 +225,20 @@ void ocf_mngt_cache_unlock(ocf_cache_t cache);
  * @param[in] cache Handle to cache
  */
 void ocf_mngt_cache_read_unlock(ocf_cache_t cache);
+
+/**
+ * @brief Write-unlock multilevel cache configuration
+ *
+ * @param[in] main_cache Handle to main cache
+ */
+void ocf_mngt_cache_ml_unlock(ocf_cache_t main_cache);
+
+/**
+ * @brief Read-unlock multilevel cache configuration
+ *
+ * @param[in] main_cache Handle to main cache
+ */
+void ocf_mngt_cache_ml_read_unlock(ocf_cache_t main_cache);
 
 /**
  * @brief Cache visitor function
@@ -242,6 +280,44 @@ int ocf_mngt_cache_visit(ocf_ctx_t ctx, ocf_mngt_cache_visitor_t visitor,
  */
 int ocf_mngt_cache_visit_reverse(ocf_ctx_t ctx, ocf_mngt_cache_visitor_t visitor,
 		void *cntx);
+
+typedef int (*ocf_mngt_cache_ml_visitor_t)(ocf_cache_t cache, void *priv);
+
+/* @brief Visit all the caches in multi-level cache stack top-down
+ *
+ * @param[in] cache main cache of the stack (botommost)
+ * @param[in] visitor function to be called on each cache in stack
+ * @param[in] rollback_visitor optional function to be called after failure of
+ *              any of visitors. They're called in reverse starting from the
+ *              previous cache for which the visitor failed
+ *
+ * @param[in] priv visitor context
+ *
+ * @retval -OCF_ERR_EINVAL cache is not the botommost in stack
+ * @retval whatever visitor returns
+ */
+int ocf_mngt_cache_ml_visit_from_top(ocf_cache_t cache,
+		ocf_mngt_cache_ml_visitor_t visitor,
+		ocf_mngt_cache_ml_visitor_t rollback_visitor,
+		void *priv);
+
+/* @brief Visit all the caches in multi-level cache stack bottom-up
+ *
+ * @param[in] cache main cache of the stack (botommost)
+ * @param[in] visitor function to be called on each cache in stack
+ * @param[in] rollback_visitor optional function to be called after failure of
+ *              any of visitors. They're called in reverse starting from the
+ *              previous cache for which the visitor failed
+ *
+ * @param[in] priv visitor context
+ *
+ * @retval -OCF_ERR_EINVAL cache is not the botommost in stack
+ * @retval whatever visitor returns
+ */
+int ocf_mngt_cache_ml_visit_from_bottom(ocf_cache_t cache,
+		ocf_mngt_cache_ml_visitor_t visitor,
+		ocf_mngt_cache_ml_visitor_t rollback_visitor,
+		void *priv);
 
 /**
  * @brief Cache start configuration
@@ -288,6 +364,16 @@ struct ocf_mngt_cache_config {
 	bool use_submit_io_fast;
 
 	/**
+	 * @brief define content classifiers to be used
+	 */
+	uint8_t ocf_classifier;
+
+	/**
+	 * @brief define prefetchers to be used
+	 */
+	uint8_t ocf_prefetcher;
+
+	/**
 	 * @brief Backfill configuration
 	 */
 	struct {
@@ -316,6 +402,9 @@ static inline void ocf_mngt_cache_config_set_default(
 	cfg->locked = false;
 	cfg->pt_unaligned_io = false;
 	cfg->use_submit_io_fast = false;
+	cfg->ocf_classifier = OCF_CLASSIFIER_IGNORE_OCF |
+			      OCF_CLASSIFIER_WRITE_CHUNKS;
+	cfg->ocf_prefetcher = DEFAULT_PREFETCH_ALGO;
 }
 
 /**
@@ -331,6 +420,50 @@ static inline void ocf_mngt_cache_config_set_default(
  */
 int ocf_mngt_cache_start(ocf_ctx_t ctx, ocf_cache_t *cache,
 		struct ocf_mngt_cache_config *cfg, void *priv);
+
+/*
+ * @brief Completion callback of cache add upper cache operation
+ *
+ * @param[in] cache Main cache handle
+ * @param[in] upper_cache Upper cache handle
+ * @param[in] priv Callback context
+ * @param[in] error Error code 
+ */
+typedef void (*ocf_mngt_cache_ml_add_cache_end_t)(ocf_cache_t cache,
+	       ocf_cache_t upper_cache, void *priv, int error);
+
+/*
+ * @brief Add an existing cache as an upper cache to a running cache instance
+ *
+ * @param[in] cache Main cache handle
+ * @param[in] upper_cache Upper cache handle
+ * @param[in] cb Completion callback
+ * @param[in] priv Completion callback context
+ */
+void ocf_mngt_cache_ml_add_cache(ocf_cache_t cache, ocf_cache_t upper_cache,
+		ocf_mngt_cache_ml_add_cache_end_t cb, void *priv);
+
+/*
+ * @brief Completion callback of the remove uppermost cache operation
+ *
+ * @param[in] cache Main cache handle
+ * @param[in] removed_cache Removed cache handle
+ * @param[in] priv Callback context
+ * @param[in] error Error code
+ */
+typedef void (*ocf_mngt_cache_ml_remove_cache_end_t)(ocf_cache_t cache,
+	       ocf_cache_t removed_cache, void *priv, int error);
+
+/*
+ * @brief Remove the top layer cache from a multilevel cache instance
+ *
+ * @param[in] cache Main cache handle
+ * @param[in] cb Completion callback
+ * @param[in] priv Completion callback context
+ */
+void ocf_mngt_cache_ml_remove_cache(ocf_cache_t cache,
+		ocf_mngt_cache_ml_remove_cache_end_t cb,
+		void *priv);
 
 /**
  * @brief Completion callback of cache stop operation
@@ -514,6 +647,34 @@ void ocf_mngt_cache_detach(ocf_cache_t cache,
 		ocf_mngt_cache_detach_end_t cmpl, void *priv);
 
 /**
+ * @brief Add a new member to composite cache
+ *
+ * @param[in] cache Cache handle
+ * @param[in] vol_uuid UUID of the new volume to be added as a member
+ *				of composite
+ * @param[in] tgt_id Target subvolume id
+ * @param[in] vol_type Type of the new volume
+ * @param[in] vol_params Params of the new volume
+ * @param[in] cmpl Completion callback
+ * @param[in] priv Completion callback context
+ */
+void ocf_mngt_cache_attach_composite(ocf_cache_t cache, ocf_uuid_t vol_uuid,
+		uint8_t tgt_id, ocf_volume_type_t vol_type, void *vol_params,
+		ocf_mngt_cache_detach_end_t cmpl, void *priv);
+
+/**
+ * @brief Detach a member of composite cache
+ *
+ * @param[in] cache Cache handle
+ * @param[in] cmpl Completion callback
+ * @param[in] target_uuid uuid of the target subvolume
+ * @param[in] priv Completion callback context
+ */
+void ocf_mngt_cache_detach_composite(ocf_cache_t cache,
+		ocf_mngt_cache_detach_end_t cmpl, ocf_uuid_t target_uuid,
+		void *priv);
+
+/**
  * @brief Completion callback of cache load operation
  *
  * @param[in] cache Cache handle
@@ -581,7 +742,6 @@ void ocf_mngt_cache_standby_load(ocf_cache_t cache,
 /**
  * @brief Completion callback of cache standby detach operation
  *
- * @param[in] cache Cache handle
  * @param[in] priv Callback context
  * @param[in] error Error code (zero on success)
  */

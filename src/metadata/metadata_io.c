@@ -109,7 +109,7 @@ static int metadata_io_read_i_atomic_step(struct ocf_request *req)
 	context->curr_count = OCF_MIN(max_sectors_count, context->count);
 
 	/* Reset position in data buffer */
-	ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
+	(void)ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
 
 	ocf_req_forward_cache_init(req, metadata_io_read_i_atomic_step_end);
 
@@ -204,7 +204,7 @@ static int metadata_io_do(struct ocf_request *req)
 	struct metadata_io_request *m_req = req->priv;
 	ocf_cache_t cache = req->cache;
 
-	ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
+	(void)ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
 
 	/* Fill with the latest metadata. */
 	if (m_req->req.rw == OCF_WRITE) {
@@ -215,7 +215,7 @@ static int metadata_io_do(struct ocf_request *req)
 				 m_req->page % OCF_NUM_GLOBAL_META_LOCKS);
 	}
 
-	ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
+	(void)ctx_data_seek(cache->owner, req->data, ctx_data_seek_begin, 0);
 
 	ocf_req_forward_cache_init(req, metadata_io_end);
 
@@ -287,7 +287,7 @@ static void metadata_io_end(struct ocf_request *req, int error)
 			metadata_io_req_drain(m_req);
 	}
 
-	OCF_DEBUG_PARAM(m_req->cache, "Page = %u", m_req->page);
+	OCF_DEBUG_PARAM(cache, "Page = %u", m_req->page);
 
 	if (a_req->mio_conc)
 		ocf_mio_async_unlock(a_req->mio_conc, m_req);
@@ -485,17 +485,10 @@ int metadata_io_read_i_asynch(ocf_cache_t cache, ocf_queue_t queue,
 
 int ocf_metadata_io_ctx_init(struct ocf_ctx *ocf_ctx)
 {
-	uint32_t limits[] = {
-		[0 ... MIO_RPOOL_THRESHOLD - 1] = -1,
-		[MIO_RPOOL_THRESHOLD ... ocf_mio_size_max - 1] = MIO_RPOOL_LIMIT,
-		[ocf_mio_size_max ... env_mpool_max] = -1,
-	};
-
 	ocf_ctx->resources.mio = env_mpool_create(
 			sizeof(struct metadata_io_request_asynch),
 			sizeof(struct metadata_io_request),
 			ENV_MEM_NOIO, ocf_mio_size_max - 1, true,
-			limits,
 			"ocf_mio",
 			true);
 	if (ocf_ctx->resources.mio == NULL)

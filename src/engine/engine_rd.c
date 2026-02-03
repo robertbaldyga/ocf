@@ -28,11 +28,12 @@ static void _ocf_read_generic_hit_complete(struct ocf_request *req, int error)
 	struct ocf_alock *c = ocf_cache_line_concurrency(
 			req->cache);
 
-	OCF_DEBUG_RQ(req, "HIT completion");
+	OCF_DEBUG_RQ(req, "HIT completion, prefetch=%d", req->io.prefetch);
 
 	if (error) {
 		ocf_core_stats_cache_error_update(req->core, OCF_READ);
 		inc_fallback_pt_error_counter(req->cache);
+
 		ocf_queue_push_req_pt(req);
 	} else {
 		ocf_req_unlock(c, req);
@@ -218,4 +219,47 @@ int ocf_read_generic(struct ocf_request *req)
 	ocf_req_put(req);
 
 	return 0;
+}
+
+bool ocf_read_generic_fast(struct ocf_request *req)
+{
+	struct ocf_alock *c = ocf_cache_line_concurrency(req->cache);
+
+
+	/* Calculate hashes for hash-bucket locking */
+	ocf_req_hash(req);
+
+	/* Read-lock hash buckets associated with request target core & LBAs
+	* (core lines) to assure that cache mapping for these core lines does
+	* not change during traversation */
+	ocf_hb_req_prot_lock_rd(req);
+
+	/* check CL status */
+	ocf_engine_lookup(req);
+
+	if (ocf_engine_is_mapped(req) && ocf_engine_is_hit(req) &&
+		ocf_cl_lock_line_fast(c, req, OCF_READ) == OCF_LOCK_ACQUIRED) {
+
+		ocf_req_get(req);
+
+		ocf_engine_set_hot(req);
+		ocf_engine_update_pf(req);
+		ocf_hb_req_prot_unlock_rd(req);
+
+		if (ocf_engine_needs_repart(req)) {
+			ocf_hb_req_prot_lock_wr(req);
+			ocf_user_part_move(req);
+			ocf_hb_req_prot_unlock_wr(req);
+		}
+
+		ocf_read_generic_submit_hit(req);
+
+		/* Update statistics */
+		ocf_engine_update_request_stats(req);
+		ocf_engine_update_block_stats(req);
+		return true;
+	} else {
+		ocf_hb_req_prot_unlock_rd(req);
+		return false;
+	}
 }

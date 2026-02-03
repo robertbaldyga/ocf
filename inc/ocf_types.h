@@ -29,9 +29,9 @@ typedef uint16_t ocf_core_id_t;
 typedef uint16_t ocf_seq_no_t;
 
 /**
- * @brief partition id type (by default designated as 16 bit unsigned integer)
+ * @brief partition id type (by default designated as 8 bit unsigned integer)
  */
-typedef uint16_t ocf_part_id_t;
+typedef uint8_t ocf_part_id_t;
 
 /**
  * @brief handle to object designating ocf context

@@ -27,6 +27,9 @@ typedef enum {
 	/** Operation interrupted */
 	OCF_ERR_INTR,
 
+	/** Busy */
+	OCF_ERR_BUSY,
+
 	/** Operation not supported */
 	OCF_ERR_NOT_SUPP,
 
@@ -71,6 +74,30 @@ typedef enum {
 
 	/** Core ID/name does not exist */
 	OCF_ERR_CORE_NOT_EXIST,
+
+	/** Composite volume member ID does not exist */
+	OCF_ERR_COMPOSITE_VOLUME_MEMBER_NOT_EXIST,
+
+	/** The volume is not a composite */
+	OCF_ERR_NOT_COMPOSITE_VOLUME,
+
+	/** The volume is a member of the target composite already */
+	OCF_ERR_COMPOSITE_VOLUME_UUID_EXIST,
+
+	/** Invalid subvolume ID */
+	OCF_ERR_COMPOSITE_INVALID_ID,
+
+	/** The target subvolume isn't initialised */
+	OCF_ERR_COMPOSITE_UNINITIALISED_VOLUME,
+
+	/** The target subvolume is already_attached */
+	OCF_ERR_COMPOSITE_ATTACHED,
+
+	/** The target subvolume is already detached */
+	OCF_ERR_COMPOSITE_DETACHED,
+
+	/** The target subvolume is has invalid size */
+	OCF_ERR_COMPOSITE_INVALID_SIZE,
 
 	/** Cache ID/name already exists */
 	OCF_ERR_CACHE_EXIST,
@@ -159,10 +186,19 @@ typedef enum {
 	/** Operation only allowed in standby mode **/
 	OCF_ERR_CACHE_NOT_STANDBY,
 
+	/** An attempt to issue prefetch request as PT request */
+	OCF_ERR_PREFETCH_AS_PT,
+
 	/** Operation not allowed when cleaner is disabled **/
 	OCF_ERR_CLEANER_DISABLED,
 
-	OCF_ERR_MAX = OCF_ERR_CLEANER_DISABLED,
+	/** Operation not allowed on upper caches of multi-level cache */
+	OCF_ERR_CACHE_NOT_MAIN,
+
+	/** Operation not supported for multi-level cache */
+	OCF_ERR_CACHE_IS_MULTI_LEVEL,
+
+	OCF_ERR_MAX = OCF_ERR_CACHE_IS_MULTI_LEVEL,
 
 } ocf_error_t;
 
