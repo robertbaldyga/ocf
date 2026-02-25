@@ -9,5 +9,6 @@
 int ocf_read_generic(struct ocf_request *req);
 
 void ocf_read_generic_submit_hit(struct ocf_request *req);
+bool ocf_read_generic_fast(struct ocf_request *req);
 
 #endif /* ENGINE_RD_H_ */

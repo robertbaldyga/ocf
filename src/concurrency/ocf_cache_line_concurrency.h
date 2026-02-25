@@ -189,4 +189,19 @@ ocf_cache_line_concurrency(ocf_cache_t cache)
 	return cache->device->concurrency.cache_line;
 }
 
+/**
+ * @brief Try to lock cacheline fast
+ *
+ * @param alock - alock object
+ * @param req - OCF request
+ * @param rw - io direction (OCF_READ/OCF_WRITE)
+ *
+ * @returns lock acquisition status or negative error code in case of internal
+ *		error
+ * @retval OCF_LOCK_ACQUIRED - OCF request has been locked and can be processed
+ * @retval OCF_LOCK_NOT_ACQUIRED - OCF request lock not acquired
+ */
+int ocf_cl_lock_line_fast(struct ocf_alock *alock,
+		struct ocf_request *req, int rw);
+
 #endif /* OCF_CONCURRENCY_H_ */
