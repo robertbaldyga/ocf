@@ -13,8 +13,11 @@
 #include "metadata/metadata.h"
 #include "engine/cache_engine.h"
 #include "engine/engine_d2c.h"
+#include "engine/engine_rd.h"
 #include "utils/utils_user_part.h"
 #include "ocf_request.h"
+
+#define MAX_FAST_PATH_CACHE_LINES (64)
 
 struct ocf_core_volume {
 	ocf_core_t core;
@@ -215,43 +218,58 @@ static void ocf_req_complete(struct ocf_request *req, int error)
 	ocf_req_put(req);
 }
 
-static inline ocf_req_cache_mode_t _ocf_core_req_resolve_fast_mode(
-		ocf_cache_t cache, struct ocf_request *req)
+static int ocf_core_submit_io_fast(struct ocf_request *req, ocf_core_t core,
+		ocf_cache_t cache)
 {
+	ocf_req_cache_mode_t original_cache_mode;
+	int fast;
+
 	switch (req->cache_mode) {
-		case ocf_req_cache_mode_wb:
-		case ocf_req_cache_mode_wo:
-			return ocf_req_cache_mode_fast;
-		default:
-			break;
+	case ocf_req_cache_mode_wt:
+	case ocf_req_cache_mode_wa:
+	case ocf_req_cache_mode_wi:
+		if (req->rw == OCF_READ && req->core_line_count <= MAX_FAST_PATH_CACHE_LINES) {
+			if (ocf_read_generic_fast(req))
+				return 0;
+			ocf_req_clear_map(req);
+		}
+		break;
+
+	case ocf_req_cache_mode_wb:
+	case ocf_req_cache_mode_wo:
+		if (req->rw == OCF_READ && req->core_line_count <= MAX_FAST_PATH_CACHE_LINES)
+			return ocf_read_generic_fast(req) ? 0 : -OCF_ERR_IO;
+		break;
+	default:
+		break;
 	}
 
-	if (!cache->use_submit_io_fast)
-		return ocf_req_cache_mode_max;
+	original_cache_mode = req->cache_mode;
 
-	return ocf_req_cache_mode_fast;
-}
+	switch (req->cache_mode) {
+	case ocf_req_cache_mode_pt:
+		return -OCF_ERR_IO;
+	case ocf_req_cache_mode_wb:
+	case ocf_req_cache_mode_wo:
+		if (req->rw == OCF_WRITE)
+			req->cache_mode = ocf_req_cache_mode_fast;
+		break;
+	default:
+		if (cache->use_submit_io_fast)
+			break;
 
-static int ocf_core_submit_io_fast(struct ocf_request *req, ocf_cache_t cache)
-{
-	ocf_req_cache_mode_t original_mode, resolved_mode;
-	int ret;
+		if (req->rw == OCF_WRITE)
+			return -OCF_ERR_IO;
 
-	if (req->cache_mode == ocf_req_cache_mode_pt)
-		return OCF_FAST_PATH_NO;
+		req->cache_mode = ocf_req_cache_mode_fast;
+	}
 
-	resolved_mode = _ocf_core_req_resolve_fast_mode(cache, req);
-	if (resolved_mode == ocf_req_cache_mode_max)
-		return OCF_FAST_PATH_NO;
+	fast = ocf_engine_hndl_fast_req(req);
+	if (fast != OCF_FAST_PATH_NO)
+		return 0;
 
-	original_mode = req->cache_mode;
-	req->cache_mode = resolved_mode;
-
-	ret = ocf_engine_hndl_fast_req(req);
-	if (ret == OCF_FAST_PATH_NO)
-		req->cache_mode = original_mode;
-
-	return ret;
+	req->cache_mode = original_cache_mode;
+	return -OCF_ERR_IO;
 }
 
 static void ocf_core_volume_submit_io(ocf_io_t io)
