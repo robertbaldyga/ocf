@@ -10,12 +10,13 @@
 
 struct ocf_lru_meta {
 	uint64_t prev : OCF_CACHE_LINE_BITS;
-	uint64_t unused : 3;
+	uint64_t partition_id : OCF_IO_CLASSES_BITS;
 	uint64_t next : OCF_CACHE_LINE_BITS;
 	uint64_t hot : 1;
-	uint64_t unused2 : 2;
-	ocf_part_id_t partition_id : 8;
+	uint64_t unused : 2;
 } __attribute__((packed));
+
+_Static_assert(sizeof(struct ocf_lru_meta) == sizeof(uint64_t));
 
 struct ocf_lru_list {
 	uint32_t num_nodes;
