@@ -4,7 +4,7 @@
 [![Tests Status](https://github.com/Open-CAS/ocf/actions/workflows/tests-master.yml/badge.svg)](https://github.com/Open-CAS/ocf/actions/workflows/tests-master.yml)
 [![Coverity status](https://scan.coverity.com/projects/19083/badge.svg)](https://scan.coverity.com/projects/open-cas-ocf)
 [![codecov](https://codecov.io/gh/Open-CAS/ocf/branch/master/graph/badge.svg)](https://codecov.io/gh/Open-CAS/ocf)
-[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE.md)
 [![Maintained by Unvertical](https://img.shields.io/badge/maintained%20by-Unvertical-0b5fff)](https://unvertical.com/)
 
 Open CAS Framework (OCF) is high performance block storage caching meta-library
